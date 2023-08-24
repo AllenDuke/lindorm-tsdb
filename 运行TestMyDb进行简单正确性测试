@@ -1,0 +1,4 @@
+运行前需要增加下面的 JVM 参数：
+--add-opens java.base/jdk.internal.misc=ALL-UNNAMED
+
+使用 maven 运行时，确保本地 JAVA_HOME 指定的 JDK >= 11

@@ -20,12 +20,7 @@ public abstract class AbPage {
     /**
      * 页号
      */
-    protected int num;
-
-    /**
-     * 当前是否是是数据页
-     */
-    protected boolean isDataPage;
+    protected final int num;
 
     /**
      * 当前页所在文件
@@ -37,16 +32,34 @@ public abstract class AbPage {
      */
     protected final BufferPool bufferPool;
 
-    protected ByteBuffer dataBuffer;
+    /**
+     * flush会释放，
+     */
+    protected PooledByteBuffer dataBuffer;
 
-    public AbPage(FileChannel fileChannel, BufferPool bufferPool) {
+    protected boolean recovered;
+
+    public AbPage(FileChannel fileChannel, BufferPool bufferPool, int num) {
         this.fileChannel = fileChannel;
         this.bufferPool = bufferPool;
+        this.num = num;
+        this.recovered = false;
     }
 
-    public void recover() throws IOException {
+    public synchronized void recover() throws IOException {
+        if (recovered) {
+            return;
+        }
+        dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
+        if (fileChannel.size() <= PAGE_SIZE * num) {
+            return;
+        }
         FileLock lock = fileChannel.lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        fileChannel.read(dataBuffer);
+        fileChannel.read(dataBuffer.getByteBuffer(), PAGE_SIZE * num);
+        lock.release();
+
+        dataBuffer.getByteBuffer().flip();
+        recovered = true;
     }
 
     /**
@@ -54,17 +67,9 @@ public abstract class AbPage {
      */
     public void flush() throws IOException {
         FileLock lock = fileChannel.lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        ByteBuffer buffer = bufferPool.allocate(1);
-        if (!isDataPage) {
-            // cpu分支预测
-            buffer.put((byte) 0);
-        } else {
-            buffer.put((byte) 1);
-        }
-        buffer.flip();
-        fileChannel.write(buffer);
-        dataBuffer.flip();
-        fileChannel.write(dataBuffer);
+        fileChannel.write(dataBuffer.getByteBuffer());
         lock.release();
+
+        bufferPool.free(dataBuffer);
     }
 }

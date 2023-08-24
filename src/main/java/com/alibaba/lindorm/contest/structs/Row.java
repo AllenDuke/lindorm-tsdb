@@ -20,6 +20,9 @@
 
 package com.alibaba.lindorm.contest.structs;
 
+import com.alibaba.lindorm.contest.CommonUtils;
+
+import java.nio.ByteBuffer;
 import java.util.Map;
 
 /**
@@ -30,33 +33,61 @@ import java.util.Map;
  * columns according to our request.
  */
 public class Row {
-  private final Vin vin;
-  private final long timestamp;
+    private final Vin vin;
+    private final long timestamp;
 
-  // For write request, this map must contain all columns defined in schema.
-  // For read request, this is the result set only containing the columns we queried.
-  @Constant private final Map<String, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
+    // For write request, this map must contain all columns defined in schema.
+    // For read request, this is the result set only containing the columns we queried.
+    @Constant
+    private final Map<String, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
 
-  public Row(Vin vin, long timestamp, @Constant Map<String, ColumnValue> columns) {
-    this.vin = vin;
-    this.timestamp = timestamp;
-    this.columns = columns;
-  }
+    public Row(Vin vin, long timestamp, @Constant Map<String, ColumnValue> columns) {
+        this.vin = vin;
+        this.timestamp = timestamp;
+        this.columns = columns;
+    }
 
-  public Vin getVin() {
-    return vin;
-  }
+    public Vin getVin() {
+        return vin;
+    }
 
-  public long getTimestamp() {
-    return timestamp;
-  }
+    public long getTimestamp() {
+        return timestamp;
+    }
 
-  public @Constant Map<String, ColumnValue> getColumns() {
-    return columns;
-  }
+    public @Constant
+    Map<String, ColumnValue> getColumns() {
+        return columns;
+    }
 
-  @Override
-  public String toString() {
-    return String.format("Row. Vin: [%s]. Timestamp: [%d]. Columns: [%s]", vin, timestamp, columns);
-  }
+    @Override
+    public String toString() {
+        return String.format("Row. Vin: [%s]. Timestamp: [%d]. Columns: [%s]", vin, timestamp, columns);
+    }
+
+    public int totalSize() {
+        // todo 暂不计算vin
+        int size = 0;
+
+        // 时间戳
+        size += 8;
+
+        for (ColumnValue cVal : columns.values()) {
+            switch (cVal.getColumnType()) {
+                case COLUMN_TYPE_STRING:
+                    size += cVal.getStringValue().remaining();
+                    break;
+                case COLUMN_TYPE_INTEGER:
+                    size += 4;
+                    break;
+                case COLUMN_TYPE_DOUBLE_FLOAT:
+                    size += 8;
+                    break;
+                default:
+                    throw new IllegalStateException("Invalid column type");
+            }
+        }
+
+        return size;
+    }
 }

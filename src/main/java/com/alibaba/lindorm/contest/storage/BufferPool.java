@@ -25,37 +25,39 @@ public class BufferPool {
         available = size;
     }
 
-    private Set<ByteBuffer> free;
+    private Set<PooledByteBuffer> free;
 
-    private Set<ByteBuffer> busy;
+    private Set<PooledByteBuffer> busy;
 
     /**
      * 迷你buffer共用一个大的。
      */
     private ByteBuffer miniBuffer;
 
-    public synchronized ByteBuffer allocate(int need) {
+    private int maxNum;
+
+    public synchronized PooledByteBuffer allocate(int need) {
         if (need > available) {
             return null;
         }
-        ByteBuffer allocate;
+        PooledByteBuffer pooledByteBuffer;
         if (free != null && !free.isEmpty()) {
-            allocate = free.stream().findFirst().get();
-            free.remove(allocate);
+            pooledByteBuffer = free.stream().findFirst().get();
+            free.remove(pooledByteBuffer);
         } else {
             free = new HashSet<>();
-            allocate = ByteBuffer.allocate(need);
+            ByteBuffer allocate = ByteBuffer.allocate(need);
+            pooledByteBuffer = new PooledByteBuffer(allocate, maxNum++);
         }
         if (busy == null) {
             busy = new HashSet<>();
         }
-        busy.add(allocate);
+        busy.add(pooledByteBuffer);
         available -= need;
-        return allocate;
+        return pooledByteBuffer;
     }
 
-    public synchronized boolean free(ByteBuffer buffer) {
-        buffer.equals()
+    public synchronized boolean free(PooledByteBuffer buffer) {
         boolean remove = busy.remove(buffer);
         if (remove) {
             free.add(buffer);

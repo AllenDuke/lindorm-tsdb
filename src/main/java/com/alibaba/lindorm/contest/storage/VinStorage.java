@@ -20,10 +20,11 @@ public class VinStorage {
 
     private FileChannel dbChannel;
 
-    private int pageCount = 0;
+    private int pageCount;
 
     public VinStorage(Vin vin) {
         this.vin = vin;
+        this.pageCount = -1;
     }
 
     private void init() throws IOException {
@@ -33,7 +34,7 @@ public class VinStorage {
             dbFile.createNewFile();
         }
         dbChannel = new FileInputStream(dbFile).getChannel();
-        root = new TimeSortedPage(this, COMMON_POOL, 0);
+        root = new TimeSortedPage(this, COMMON_POOL, grow());
         pageCount++;
     }
 
@@ -57,5 +58,14 @@ public class VinStorage {
 
     public FileChannel dbChannel() {
         return dbChannel;
+    }
+
+    /**
+     * 文件页数增长。
+     *
+     * @return
+     */
+    synchronized int grow() {
+        return ++pageCount;
     }
 }

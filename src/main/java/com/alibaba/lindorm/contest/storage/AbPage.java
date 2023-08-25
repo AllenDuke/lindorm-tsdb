@@ -8,7 +8,7 @@ public abstract class AbPage {
     /**
      * 页大小4k
      */
-    public static long PAGE_SIZE = 4 * 1024;
+    public static long PAGE_SIZE = 16 * 1024;
 
     /**
      * 表示往后没有更多的页
@@ -35,24 +35,22 @@ public abstract class AbPage {
      */
     protected PooledByteBuffer dataBuffer;
 
-    protected boolean recovered;
+    protected PageStat stat;
 
     public AbPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
         this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
-        this.recovered = false;
+        stat = PageStat.NEW;
     }
 
     public synchronized void recover() throws IOException {
-        if (recovered) {
+        if (stat != PageStat.FLUSHED) {
+            // 没刷盘，不需要恢复
             return;
         }
+
         dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
-        if (vinStorage.size() <= PAGE_SIZE * num) {
-            recovered = true;
-            return;
-        }
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().read(dataBuffer.unwrap(), PAGE_SIZE * num);
         lock.release();
@@ -62,7 +60,7 @@ public abstract class AbPage {
         }
 
         dataBuffer.unwrap().flip();
-        recovered = true;
+        stat = PageStat.USING;
     }
 
     /**

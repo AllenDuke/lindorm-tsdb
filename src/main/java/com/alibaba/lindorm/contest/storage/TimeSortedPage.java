@@ -38,7 +38,7 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public synchronized void recover() throws IOException {
-        if (recovered) {
+        if (stat != PageStat.FLUSHED) {
             return;
         }
 
@@ -59,7 +59,8 @@ public class TimeSortedPage extends AbPage {
 
             nextNum = extPage.next();
         }
-        recovered = true;
+
+        stat = PageStat.USING;
     }
 
     @Override
@@ -109,8 +110,12 @@ public class TimeSortedPage extends AbPage {
 
         extPageList = new LinkedList<>();
         while (vTotalSize > 0) {
-
+            ExtPage extPage = new ExtPage(vinStorage, bufferPool, vinStorage.grow());
+            vTotalSize -= extPage.dataCapacity();
+            extPageList.add(extPage);
         }
+
+        map.put(k, v);
     }
 
     /**
@@ -142,10 +147,11 @@ public class TimeSortedPage extends AbPage {
             }
             return false;
         }
-        // 插入map
-        map.put(k, v);
 
         dataBuffer.unwrap().position(position + 4 + vTotalSize);
+
+        // 插入map
+        map.put(k, v);
         return true;
     }
 }

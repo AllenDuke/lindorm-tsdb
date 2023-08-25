@@ -6,18 +6,16 @@ public class PooledByteBuffer {
 
     private final ByteBuffer byteBuffer;
 
-    private final int num;
-
-    PooledByteBuffer(ByteBuffer byteBuffer, int num) {
+    PooledByteBuffer(ByteBuffer byteBuffer) {
         this.byteBuffer = byteBuffer;
-        this.num = num;
     }
 
-    public ByteBuffer getByteBuffer() {
+    /**
+     * 不能作为某对象的属性
+     * @return
+     */
+    public ByteBuffer unwrap() {
         return byteBuffer;
     }
 
-    public int getNum() {
-        return num;
-    }
 }

@@ -4,17 +4,12 @@ import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class TimeSortedPage extends AbPage {
 
-    public static final Map<FileChannel, AtomicInteger> FILE_MAX_PAGE_NUM = new ConcurrentHashMap<>();
-
-    public TimeSortedPage(FileChannel fileChannel, BufferPool bufferPool, int num) {
-        super(fileChannel, bufferPool, num);
+    public TimeSortedPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+        super(vinStorage, bufferPool, num);
     }
 
     /**
@@ -49,16 +44,16 @@ public class TimeSortedPage extends AbPage {
 
         super.recover();
 
-        leftNum = dataBuffer.getByteBuffer().getInt();
-        minTime = dataBuffer.getByteBuffer().getLong();
-        rightNum = dataBuffer.getByteBuffer().getInt();
-        maxTime = dataBuffer.getByteBuffer().getLong();
+        leftNum = dataBuffer.unwrap().getInt();
+        minTime = dataBuffer.unwrap().getLong();
+        rightNum = dataBuffer.unwrap().getInt();
+        maxTime = dataBuffer.unwrap().getLong();
 
         // 实际上也不会有循环recover
-        int nextNum = dataBuffer.getByteBuffer().getInt();
+        int nextNum = dataBuffer.unwrap().getInt();
         while (nextNum >= 0 && nextNum != num) {
             // 有扩展页
-            ExtPage extPage = new ExtPage(fileChannel, bufferPool, nextNum);
+            ExtPage extPage = new ExtPage(vinStorage, bufferPool, nextNum);
             extPage.recover();
             extPageList.add(extPage);
 
@@ -70,18 +65,18 @@ public class TimeSortedPage extends AbPage {
     @Override
     public void flush() throws IOException {
         for (Row row : map.values()) {
-            dataBuffer.getByteBuffer().putInt(row.totalSize());
+            dataBuffer.unwrap().putInt(row.totalSize());
             Map<String, ColumnValue> columns = row.getColumns();
             for (ColumnValue cVal : columns.values()) {
                 switch (cVal.getColumnType()) {
                     case COLUMN_TYPE_STRING:
-                        dataBuffer.getByteBuffer().put(cVal.getStringValue());
+                        dataBuffer.unwrap().put(cVal.getStringValue());
                         break;
                     case COLUMN_TYPE_INTEGER:
-                        dataBuffer.getByteBuffer().putInt(cVal.getIntegerValue());
+                        dataBuffer.unwrap().putInt(cVal.getIntegerValue());
                         break;
                     case COLUMN_TYPE_DOUBLE_FLOAT:
-                        dataBuffer.getByteBuffer().putDouble(cVal.getDoubleFloatValue());
+                        dataBuffer.unwrap().putDouble(cVal.getDoubleFloatValue());
                         break;
                     default:
                         throw new IllegalStateException("Invalid column type");
@@ -95,6 +90,13 @@ public class TimeSortedPage extends AbPage {
         extPageList.clear();
     }
 
+    private void first(long k, Row v) {
+        minTime = k;
+        maxTime = k;
+        leftNum = -1;
+        rightNum = -1;
+    }
+
     /**
      * 插入大数据
      *
@@ -102,8 +104,13 @@ public class TimeSortedPage extends AbPage {
      * @param v
      */
     private void insertLarge(long k, Row v, int vTotalSize) {
-        extPageList = new LinkedList<>();
+        vTotalSize = vTotalSize + 4 - dataBuffer.unwrap().remaining();
+        dataBuffer.unwrap().position(dataBuffer.unwrap().capacity());
 
+        extPageList = new LinkedList<>();
+        while (vTotalSize > 0) {
+
+        }
     }
 
     /**
@@ -116,20 +123,19 @@ public class TimeSortedPage extends AbPage {
     public boolean insert(long k, Row v) throws IOException {
         recover();
         // 检查是否插入
-        if (map.isEmpty()) {
-            // todo first
-            return true;
-        }
-
-        if (v.getTimestamp() < minTime || v.getTimestamp() > maxTime) {
+        if (!map.isEmpty() && (v.getTimestamp() < minTime || v.getTimestamp() > maxTime)) {
             return false;
         }
 
+        if (map.isEmpty()) {
+            first(k, v);
+        }
+
         // 检查当前容量
-        int position = dataBuffer.getByteBuffer().position();
+        int position = dataBuffer.unwrap().position();
         // 4字节记录行数据大小，接着记录行数据
         int vTotalSize = v.totalSize();
-        if (dataBuffer.getByteBuffer().remaining() < 4 + vTotalSize) {
+        if (dataBuffer.unwrap().remaining() < 4 + vTotalSize) {
             if (position == 0) {
                 insertLarge(k, v, vTotalSize);
                 return true;
@@ -139,7 +145,7 @@ public class TimeSortedPage extends AbPage {
         // 插入map
         map.put(k, v);
 
-        dataBuffer.getByteBuffer().position(position + 4 + vTotalSize);
+        dataBuffer.unwrap().position(position + 4 + vTotalSize);
         return true;
     }
 }

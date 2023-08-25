@@ -1,13 +1,12 @@
 package com.alibaba.lindorm.contest.storage;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
 class ExtPage extends AbPage {
 
-    public ExtPage(FileChannel fileChannel, BufferPool bufferPool, int num) {
-        super(fileChannel, bufferPool, num);
+    public ExtPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+        super(vinStorage, bufferPool, num);
     }
 
     /**
@@ -19,7 +18,7 @@ class ExtPage extends AbPage {
     public synchronized void recover() throws IOException {
         super.recover();
 
-        nextNum = dataBuffer.getByteBuffer().getInt();
+        nextNum = dataBuffer.unwrap().getInt();
     }
 
     public int next() {

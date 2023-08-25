@@ -34,8 +34,6 @@ public class BufferPool {
      */
     private ByteBuffer miniBuffer;
 
-    private int maxNum;
-
     public synchronized PooledByteBuffer allocate(int need) {
         if (need > available) {
             return null;
@@ -47,7 +45,7 @@ public class BufferPool {
         } else {
             free = new HashSet<>();
             ByteBuffer allocate = ByteBuffer.allocate(need);
-            pooledByteBuffer = new PooledByteBuffer(allocate, maxNum++);
+            pooledByteBuffer = new PooledByteBuffer(allocate);
         }
         if (busy == null) {
             busy = new HashSet<>();
@@ -60,6 +58,7 @@ public class BufferPool {
     public synchronized boolean free(PooledByteBuffer buffer) {
         boolean remove = busy.remove(buffer);
         if (remove) {
+            buffer.unwrap().clear();
             free.add(buffer);
         }
         return remove;

@@ -1,8 +1,6 @@
 package com.alibaba.lindorm.contest.storage;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 
 public abstract class AbPage {
@@ -25,7 +23,7 @@ public abstract class AbPage {
     /**
      * 当前页所在文件
      */
-    protected final FileChannel fileChannel;
+    protected final VinStorage vinStorage;
 
     /**
      * 当前页所在的内存池
@@ -39,8 +37,8 @@ public abstract class AbPage {
 
     protected boolean recovered;
 
-    public AbPage(FileChannel fileChannel, BufferPool bufferPool, int num) {
-        this.fileChannel = fileChannel;
+    public AbPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+        this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
         this.recovered = false;
@@ -51,14 +49,19 @@ public abstract class AbPage {
             return;
         }
         dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
-        if (fileChannel.size() <= PAGE_SIZE * num) {
+        if (vinStorage.size() <= PAGE_SIZE * num) {
+            recovered = true;
             return;
         }
-        FileLock lock = fileChannel.lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        fileChannel.read(dataBuffer.getByteBuffer(), PAGE_SIZE * num);
+        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
+        vinStorage.dbChannel().read(dataBuffer.unwrap(), PAGE_SIZE * num);
         lock.release();
 
-        dataBuffer.getByteBuffer().flip();
+        if (dataBuffer.unwrap().position() != dataBuffer.unwrap().capacity()) {
+            throw new IllegalStateException("不是一个完整的buffer");
+        }
+
+        dataBuffer.unwrap().flip();
         recovered = true;
     }
 
@@ -66,8 +69,8 @@ public abstract class AbPage {
      * 数据刷盘
      */
     public void flush() throws IOException {
-        FileLock lock = fileChannel.lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        fileChannel.write(dataBuffer.getByteBuffer());
+        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
+        vinStorage.dbChannel().write(dataBuffer.unwrap());
         lock.release();
 
         bufferPool.free(dataBuffer);

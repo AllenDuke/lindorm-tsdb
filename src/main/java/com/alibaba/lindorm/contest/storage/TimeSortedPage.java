@@ -53,7 +53,7 @@ public class TimeSortedPage extends AbPage {
         int nextNum = dataBuffer.unwrap().getInt();
         while (nextNum >= 0 && nextNum != num) {
             // 有扩展页
-            ExtPage extPage = new ExtPage(vinStorage, bufferPool, nextNum);
+            ExtPage extPage = vinStorage.getPage(nextNum);
             extPage.recover();
             extPageList.add(extPage);
 
@@ -110,7 +110,7 @@ public class TimeSortedPage extends AbPage {
 
         extPageList = new LinkedList<>();
         while (vTotalSize > 0) {
-            ExtPage extPage = new ExtPage(vinStorage, bufferPool, vinStorage.grow());
+            ExtPage extPage = vinStorage.creatPage(ExtPage.class);
             vTotalSize -= extPage.dataCapacity();
             extPageList.add(extPage);
         }
@@ -123,13 +123,17 @@ public class TimeSortedPage extends AbPage {
      *
      * @param k
      * @param v
-     * @return
+     * @return 如果可插入当前节点，那么返回当前页号，否则返回下一个尝试插入的页号
      */
-    public boolean insert(long k, Row v) throws IOException {
+    public int insert(long k, Row v) throws IOException {
         recover();
-        // 检查是否插入
-        if (!map.isEmpty() && (v.getTimestamp() < minTime || v.getTimestamp() > maxTime)) {
-            return false;
+        if (!map.isEmpty() && (k < minTime || k > maxTime)) {
+            // 不能插入当前节点
+            if (k < minTime) {
+                return leftNum;
+            } else {
+                return rightNum;
+            }
         }
 
         if (map.isEmpty()) {
@@ -143,15 +147,55 @@ public class TimeSortedPage extends AbPage {
         if (dataBuffer.unwrap().remaining() < 4 + vTotalSize) {
             if (position == 0) {
                 insertLarge(k, v, vTotalSize);
-                return true;
+                return num;
             }
-            return false;
+            return num;
         }
 
         dataBuffer.unwrap().position(position + 4 + vTotalSize);
 
         // 插入map
         map.put(k, v);
-        return true;
+
+        // todo 分裂
+        return num;
+    }
+
+    private void checkConnect(TimeSortedPage page) {
+        if (page.minTime >= this.minTime && page.minTime <= this.maxTime) {
+            throw new IllegalStateException("page与当前右相交");
+        }
+        if (page.maxTime >= this.minTime && page.maxTime <= this.maxTime) {
+            throw new IllegalStateException("page与当前左相交");
+        }
+    }
+
+    /**
+     * 连接另一页
+     *
+     * @param page
+     */
+    public synchronized void connect(TimeSortedPage page) {
+        checkConnect(page);
+        if (page.minTime > this.maxTime) {
+            // page为this的右节点
+
+            TimeSortedPage oldRPage = vinStorage.getPage(this.rightNum);
+            if (oldRPage != null) {
+                oldRPage.leftNum = page.num;
+                page.rightNum = oldRPage.num;
+            }
+            this.rightNum = page.num;
+        }
+        if (page.maxTime < this.minTime) {
+            // page为this的左节点
+
+            TimeSortedPage oldLPage = vinStorage.getPage(this.leftNum);
+            if (oldLPage != null) {
+                oldLPage.rightNum = page.num;
+                page.leftNum = page.num;
+            }
+            this.leftNum = page.num;
+        }
     }
 }

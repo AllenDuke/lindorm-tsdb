@@ -20,7 +20,7 @@
  */
 
 import com.alibaba.lindorm.contest.CommonUtils;
-import com.alibaba.lindorm.contest.TSDBEngineImpl;
+import com.alibaba.lindorm.contest.DemoTSDBEngineImpl;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.LatestQueryRequest;
 import com.alibaba.lindorm.contest.structs.Row;
@@ -56,7 +56,7 @@ public class TestMyDb {
             throw new IllegalStateException("Cannot create the temp data directory: " + dataDir);
         }
 
-        TSDBEngineImpl tsdbEngineSample = new TSDBEngineImpl(dataDir);
+        DemoTSDBEngineImpl tsdbEngineSample = new DemoTSDBEngineImpl(dataDir);
 
         try {
             // Stage1: write

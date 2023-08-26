@@ -11,6 +11,10 @@ public class TimeSortedPage extends AbPage {
 
     public TimeSortedPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
         super(vinStorage, bufferPool, num);
+        leftNum = -1;
+        rightNum = -1;
+        minTime = -1;
+        maxTime = -1;
     }
 
     /**
@@ -39,8 +43,7 @@ public class TimeSortedPage extends AbPage {
 
     private int extNum = -1;
 
-    @Override
-    public synchronized void recover() throws IOException {
+    private synchronized void recoverHead() throws IOException {
         if (stat != PageStat.FLUSHED) {
             return;
         }
@@ -67,6 +70,13 @@ public class TimeSortedPage extends AbPage {
         stat = PageStat.RECOVERED_HEAD;
     }
 
+    private synchronized void recoverAll() {
+        if (stat != PageStat.RECOVERED_HEAD) {
+            return;
+        }
+
+        // 恢复rowMap
+    }
 
     private void flushLarge() {
         // 没办法，需要进行一次额外的内存拷贝
@@ -82,6 +92,10 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public void flush() throws IOException {
+        if (rowMap.isEmpty()) {
+            throw new IllegalStateException("刷盘异常，页数据为空");
+        }
+
         dataBuffer.unwrap().position(0);
         dataBuffer.unwrap().putInt(leftNum);
         dataBuffer.unwrap().putLong(minTime);
@@ -159,8 +173,10 @@ public class TimeSortedPage extends AbPage {
      * @return 如果可插入当前节点，那么返回当前页号，否则返回下一个尝试插入的页号
      */
     public int insert(long k, Row v) throws IOException {
-        recover();
-        if (!rowMap.isEmpty() && (k < minTime || k > maxTime)) {
+        recoverHead();
+
+        // 这里不用rowMap是否empty来判断页是否为空，因为recoverHead不会去构建rowMap
+        if ((minTime != -1 && maxTime != -1) && (k < minTime || k > maxTime)) {
             // 不能插入当前节点
             if (k < minTime) {
                 return leftNum;
@@ -171,6 +187,8 @@ public class TimeSortedPage extends AbPage {
 
         // 准备插入当前节点
         synchronized (this) {
+            recoverAll();
+
             if (rowMap.isEmpty()) {
                 first(k, v);
             }

@@ -326,6 +326,39 @@ public class TimeSortedPage extends AbPage {
         rowMap.put(k, v);
     }
 
+    public synchronized WindowSearchResult search(WindowSearchRequest request) throws IOException {
+        recoverHead();
+        WindowSearchResult result = new WindowSearchResult(this.num);
+        if (this.minTime == -1 || this.maxTime == -1) {
+            result.setNextLeft(-1);
+            result.setNextRight(-1);
+            return result;
+        }
+
+        long leftTime = request.getMinTime();
+        if (leftTime > this.maxTime) {
+            // 往右边寻找
+            result.setNextRight(this.rightNum);
+            result.setNextLeft(-1);
+            return result;
+        }
+
+        long rightTime = request.getMaxTime();
+        if (rightTime < this.minTime) {
+            // 往左边寻找
+            result.setNextLeft(this.leftNum);
+            result.setNextRight(-1);
+            return result;
+        }
+
+        // 当前页存在数据
+        recoverAll();
+
+        Collection<Row> rows = rowMap.tailMap(leftTime).headMap(rightTime).values();
+        result.setRowList(new LinkedList<>(rows));
+        return result;
+    }
+
     /**
      * k v会立即开始读
      *

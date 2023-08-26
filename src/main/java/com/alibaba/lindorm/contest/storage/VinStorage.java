@@ -10,9 +10,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -46,6 +44,11 @@ public class VinStorage {
      */
     private final Map<Integer, AbPage> pageMap = new ConcurrentHashMap<>();
 
+    /**
+     * 保存最新的
+     */
+    private Row latestRow;
+
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
         this.path = path;
@@ -63,20 +66,58 @@ public class VinStorage {
         creatPage(TimeSortedPage.class);
     }
 
+    public synchronized ArrayList<Row> window(long minTime, long maxTime) throws IOException {
+        if (maxPage == null) {
+            return new ArrayList<>(0);
+        }
+
+        WindowSearchRequest request = new WindowSearchRequest(minTime, maxTime);
+        ArrayList<Row> rows = new ArrayList<>();
+
+        TimeSortedPage cur;
+        Stack<TimeSortedPage> traceStack = new Stack<>();
+        traceStack.push(maxPage);
+        while ((cur = traceStack.pop()) != null) {
+            WindowSearchResult result = cur.search(request);
+            List<Row> rowList = result.getRowList();
+            if (rowList != null) {
+                rows.addAll(rowList);
+            }
+            int nextLeft = result.getNextLeft();
+            if (nextLeft != -1) {
+                traceStack.push(getPage(TimeSortedPage.class, nextLeft));
+            }
+            int nextRight = result.getNextRight();
+            if (nextRight != -1) {
+                traceStack.push(getPage(TimeSortedPage.class, nextRight));
+            }
+        }
+
+        return rows;
+    }
+
+    public Row latest() {
+        return latestRow;
+    }
+
     public boolean insert(Row row) throws IOException {
         synchronized (this) {
+            if (latestRow == null || row.getTimestamp() >= latestRow.getTimestamp()) {
+                latestRow = row;
+            }
+
             Vin vin = row.getVin();
             if (!this.vin.equals(vin)) {
                 return false;
             }
 
-            if (dbChannel == null) {
+            if (maxPage == null) {
                 init();
             }
         }
 
         /**
-         * 从根节点开始寻找 插入
+         * 从最大节点开始寻找 插入
          */
         TimeSortedPage cur = maxPage;
         int nextTry = -1;

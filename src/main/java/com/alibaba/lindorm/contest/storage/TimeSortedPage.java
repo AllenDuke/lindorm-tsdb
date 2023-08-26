@@ -152,14 +152,26 @@ public class TimeSortedPage extends AbPage {
 
             /**
              * 检查容量
-             * 如果当前节点不足以完整插入该行记录，当前节点分裂，从当前页的尾部节点开始拷贝节点到新的一页
+             * 如果当前节点不足以完整插入该行记录，那么当前节点分裂，从当前页的尾部节点开始拷贝节点到新的一页
              */
             Map.Entry<Long, Row> lastEntry = map.lastEntry();
-            List<Row> transfer = new LinkedList<>();
+            List<Row> transfer = null;
             int position = dataBuffer.unwrap().position() + 4 + vTotalSize;
             while (position > dataBuffer.unwrap().capacity()) {
+                if (transfer == null) {
+                    transfer = new LinkedList<>();
+                }
                 transfer.add(lastEntry.getValue());
                 position -= 4 + rowSize(lastEntry.getValue());
+            }
+            if (transfer != null && !transfer.isEmpty()) {
+                // 转移到新的一页
+                TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
+                for (Row row : transfer) {
+                    newPage.insert(row.getTimestamp(), row);
+                }
+                // 调整链表
+                this.connect(newPage);
             }
 
             if (dataBuffer.unwrap().remaining() < 4 + vTotalSize) {

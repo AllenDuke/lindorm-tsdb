@@ -1,5 +1,6 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
 
@@ -10,6 +11,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -30,11 +32,14 @@ public class VinStorage {
 
     private final String path;
 
+    private final List<String> columnNameList;
+
     private final Map<Integer, AbPage> pageMap = new ConcurrentHashMap<>();
 
-    public VinStorage(Vin vin, String path) {
+    public VinStorage(Vin vin, String path, List<String> columnNameList) {
         this.vin = vin;
         this.path = path;
+        this.columnNameList = columnNameList;
         this.pageCount = -1;
     }
 
@@ -121,5 +126,9 @@ public class VinStorage {
 
     public <P extends AbPage> P getPage(int pageNum) {
         return (P) pageMap.get(pageNum);
+    }
+
+    public List<String> schema() {
+        return columnNameList;
     }
 }

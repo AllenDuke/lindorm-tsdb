@@ -2,7 +2,6 @@ package com.alibaba.lindorm.contest.storage;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 
 class ExtPage extends AbPage {
 
@@ -13,7 +12,7 @@ class ExtPage extends AbPage {
     /**
      * 如果当前不是NULL_PAGE，则表示往后还有更多的数据页
      */
-    private int nextNum;
+    private int nextExtNum;
 
     @Override
     public synchronized void recover() throws IOException {
@@ -23,19 +22,34 @@ class ExtPage extends AbPage {
 
         super.recover();
 
-        nextNum = dataBuffer.unwrap().getInt();
+        nextExtNum = dataBuffer.unwrap().getInt();
 
         stat = PageStat.USING;
     }
 
-    public int next() {
-        return nextNum;
+    /**
+     * 返回连接的下一个扩展页
+     *
+     * @return
+     */
+    public int nextExt() {
+        return nextExtNum;
     }
 
+    /**
+     * 获取扩展页的数据内容
+     *
+     * @return
+     */
     public ByteBuffer getData() {
         return dataBuffer.unwrap().slice();
     }
 
+    /**
+     * 写入数据内容到扩展页
+     *
+     * @param byteBuffer
+     */
     public void putData(ByteBuffer byteBuffer) {
         dataBuffer.unwrap().put(byteBuffer);
     }

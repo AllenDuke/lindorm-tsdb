@@ -64,30 +64,4 @@ public class Row {
     public String toString() {
         return String.format("Row. Vin: [%s]. Timestamp: [%d]. Columns: [%s]", vin, timestamp, columns);
     }
-
-    public int totalSize() {
-        // todo 暂不计算vin
-        int size = 0;
-
-        // 时间戳
-        size += 8;
-
-        for (ColumnValue cVal : columns.values()) {
-            switch (cVal.getColumnType()) {
-                case COLUMN_TYPE_STRING:
-                    size += cVal.getStringValue().remaining();
-                    break;
-                case COLUMN_TYPE_INTEGER:
-                    size += 4;
-                    break;
-                case COLUMN_TYPE_DOUBLE_FLOAT:
-                    size += 8;
-                    break;
-                default:
-                    throw new IllegalStateException("Invalid column type");
-            }
-        }
-
-        return size;
-    }
 }

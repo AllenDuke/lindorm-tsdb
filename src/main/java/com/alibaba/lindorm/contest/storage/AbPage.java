@@ -41,6 +41,7 @@ public abstract class AbPage {
         this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
+        this.dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
         stat = PageStat.NEW;
     }
 

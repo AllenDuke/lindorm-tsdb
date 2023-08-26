@@ -14,6 +14,8 @@ class ExtPage extends AbPage {
      */
     private int nextExtNum = -1;
 
+    private int dataSize;
+
     @Override
     public synchronized void recover() throws IOException {
         if (stat != PageStat.FLUSHED) {
@@ -23,7 +25,7 @@ class ExtPage extends AbPage {
         super.recover();
 
         nextExtNum = dataBuffer.unwrap().getInt();
-
+        dataSize = dataBuffer.unwrap().getInt();
         stat = PageStat.RECOVERED_HEAD;
     }
 
@@ -36,13 +38,19 @@ class ExtPage extends AbPage {
         return nextExtNum;
     }
 
+    public void nextExt(int nextExtNum) {
+        this.nextExtNum = nextExtNum;
+    }
+
     /**
      * 获取扩展页的数据内容
      *
      * @return
      */
     public ByteBuffer getData() {
-        return dataBuffer.unwrap().slice();
+        dataBuffer.unwrap().position(8);
+        ByteBuffer data = dataBuffer.unwrap().slice();
+        return data.limit(dataSize);
     }
 
     /**
@@ -51,6 +59,8 @@ class ExtPage extends AbPage {
      * @param byteBuffer
      */
     public void putData(ByteBuffer byteBuffer) {
+        dataSize = byteBuffer.limit();
+        dataBuffer.unwrap().position(8);
         dataBuffer.unwrap().put(byteBuffer);
     }
 
@@ -60,6 +70,7 @@ class ExtPage extends AbPage {
      * @return
      */
     public int dataCapacity() {
-        return dataBuffer.unwrap().remaining();
+        // 4字节的nextExt 4字节数据段大小
+        return dataBuffer.unwrap().limit() - 4 - 4;
     }
 }

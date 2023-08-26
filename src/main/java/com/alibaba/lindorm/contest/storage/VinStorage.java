@@ -1,5 +1,6 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
 
@@ -9,6 +10,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,17 +37,20 @@ public class VinStorage {
 
     private final String path;
 
-    private final List<String> columnNameList;
+    private final ArrayList<String> columnNameList;
+
+    private final ArrayList<ColumnValue.ColumnType> columnTypeList;
 
     /**
      * todo 释放内存
      */
     private final Map<Integer, AbPage> pageMap = new ConcurrentHashMap<>();
 
-    public VinStorage(Vin vin, String path, List<String> columnNameList) {
+    public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
         this.path = path;
         this.columnNameList = columnNameList;
+        this.columnTypeList = columnTypeList;
     }
 
     private void init() throws IOException {
@@ -150,7 +155,11 @@ public class VinStorage {
         return (P) page;
     }
 
-    public List<String> schema() {
+    public ArrayList<String> columnNameList() {
         return columnNameList;
+    }
+
+    public ArrayList<ColumnValue.ColumnType> columnTypeList() {
+        return columnTypeList;
     }
 }

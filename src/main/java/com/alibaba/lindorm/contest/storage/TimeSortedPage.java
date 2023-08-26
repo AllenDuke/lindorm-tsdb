@@ -149,18 +149,19 @@ public class TimeSortedPage extends AbPage {
 
             // 4字节记录行数据大小，接着记录行数据
             int vTotalSize = rowSize(v);
+            int position = dataBuffer.unwrap().position() + 4 + vTotalSize;
 
             /**
              * 检查容量
              * 如果当前节点不足以完整插入该行记录，那么当前节点分裂，从当前页的尾部节点开始拷贝节点到新的一页
              */
-            Map.Entry<Long, Row> lastEntry = map.lastEntry();
             List<Row> transfer = null;
-            int position = dataBuffer.unwrap().position() + 4 + vTotalSize;
+            Map.Entry<Long, Row> lastEntry = null;
             while (position > dataBuffer.unwrap().capacity()) {
                 if (transfer == null) {
                     transfer = new LinkedList<>();
                 }
+                lastEntry = map.pollLastEntry();
                 transfer.add(lastEntry.getValue());
                 position -= 4 + rowSize(lastEntry.getValue());
             }
@@ -173,20 +174,9 @@ public class TimeSortedPage extends AbPage {
                 // 调整链表
                 this.connect(newPage);
             }
-
-            if (dataBuffer.unwrap().remaining() < 4 + vTotalSize) {
-                SortedMap<Long, Row> tailMap = map.tailMap(k);
-                if (!tailMap.isEmpty()) {
-
-                }
-
-                if (map.isEmpty()) {
-                    // 当前是该页第一行数据，而且是大
-                    insertLarge(k, v, vTotalSize);
-                    return num;
-                }
-
-                //
+            if (map.isEmpty() && lastEntry != null) {
+                // 当前的第一个节点即为大节点
+                insertLarge(k, v, vTotalSize);
                 return num;
             }
 
@@ -214,7 +204,6 @@ public class TimeSortedPage extends AbPage {
         checkConnect(page);
         if (page.minTime > this.maxTime) {
             // page为this的右节点
-
             TimeSortedPage oldRPage = vinStorage.getPage(this.rightNum);
             if (oldRPage != null) {
                 oldRPage.leftNum = page.num;
@@ -224,7 +213,6 @@ public class TimeSortedPage extends AbPage {
         }
         if (page.maxTime < this.minTime) {
             // page为this的左节点
-
             TimeSortedPage oldLPage = vinStorage.getPage(this.leftNum);
             if (oldLPage != null) {
                 oldLPage.rightNum = page.num;

@@ -12,7 +12,7 @@ class ExtPage extends AbPage {
     /**
      * 如果当前不是NULL_PAGE，则表示往后还有更多的数据页
      */
-    private int nextExtNum;
+    private int nextExtNum = -1;
 
     @Override
     public synchronized void recover() throws IOException {

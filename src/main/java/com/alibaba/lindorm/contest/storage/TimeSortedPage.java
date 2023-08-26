@@ -4,6 +4,7 @@ import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 public class TimeSortedPage extends AbPage {
@@ -36,6 +37,8 @@ public class TimeSortedPage extends AbPage {
 
     private List<ExtPage> extPageList;
 
+    private int extNum = -1;
+
     @Override
     public synchronized void recover() throws IOException {
         if (stat != PageStat.FLUSHED) {
@@ -48,12 +51,13 @@ public class TimeSortedPage extends AbPage {
         minTime = dataBuffer.unwrap().getLong();
         rightNum = dataBuffer.unwrap().getInt();
         maxTime = dataBuffer.unwrap().getLong();
+        extNum = dataBuffer.unwrap().getInt();
 
         // 实际上也不会有循环recover
-        int nextExtNum = dataBuffer.unwrap().getInt();
+        int nextExtNum = extNum;
         while (nextExtNum >= 0 && nextExtNum != num) {
             // 有扩展页
-            ExtPage extPage = vinStorage.getPage(nextExtNum);
+            ExtPage extPage = vinStorage.getPage(ExtPage.class, nextExtNum);
             extPage.recover();
             extPageList.add(extPage);
 
@@ -63,8 +67,34 @@ public class TimeSortedPage extends AbPage {
         stat = PageStat.USING;
     }
 
+
+    private void flushLarge() {
+        // 没办法，需要进行一次额外的内存拷贝
+        Row bigRow = map.firstEntry().getValue();
+        int rowSize = rowSize(bigRow);
+        ByteBuffer allocate = ByteBuffer.allocate(rowSize);
+
+
+        for (ExtPage extPage : extPageList) {
+
+        }
+    }
+
     @Override
     public void flush() throws IOException {
+        dataBuffer.unwrap().position(0);
+        dataBuffer.unwrap().putInt(leftNum);
+        dataBuffer.unwrap().putLong(minTime);
+        dataBuffer.unwrap().putInt(rightNum);
+        dataBuffer.unwrap().putLong(maxTime);
+
+        if (extPageList == null || extPageList.isEmpty()) {
+            dataBuffer.unwrap().putInt(-1);
+        } else {
+            dataBuffer.unwrap().putInt(extPageList.get(0).num);
+            flushLarge();
+        }
+
         for (Row row : map.values()) {
             dataBuffer.unwrap().putInt(rowSize(row));
             List<String> columnNameList = vinStorage.schema();
@@ -86,6 +116,7 @@ public class TimeSortedPage extends AbPage {
                 }
             }
         }
+
         super.flush();
 
         // 释放内存
@@ -204,7 +235,7 @@ public class TimeSortedPage extends AbPage {
         checkConnect(page);
         if (page.minTime > this.maxTime) {
             // page为this的右节点
-            TimeSortedPage oldRPage = vinStorage.getPage(this.rightNum);
+            TimeSortedPage oldRPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
             if (oldRPage != null) {
                 oldRPage.leftNum = page.num;
                 page.rightNum = oldRPage.num;
@@ -213,7 +244,7 @@ public class TimeSortedPage extends AbPage {
         }
         if (page.maxTime < this.minTime) {
             // page为this的左节点
-            TimeSortedPage oldLPage = vinStorage.getPage(this.leftNum);
+            TimeSortedPage oldLPage = vinStorage.getPage(TimeSortedPage.class, this.leftNum);
             if (oldLPage != null) {
                 oldLPage.rightNum = page.num;
                 page.leftNum = page.num;

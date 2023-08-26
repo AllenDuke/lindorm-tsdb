@@ -34,13 +34,16 @@ public class VinStorage {
 
     private final List<String> columnNameList;
 
+    /**
+     * todo 释放内存
+     */
     private final Map<Integer, AbPage> pageMap = new ConcurrentHashMap<>();
 
     public VinStorage(Vin vin, String path, List<String> columnNameList) {
         this.vin = vin;
         this.path = path;
         this.columnNameList = columnNameList;
-        this.pageCount = -1;
+        this.pageCount = 0;
     }
 
     private void init() throws IOException {
@@ -72,7 +75,7 @@ public class VinStorage {
         int nextTry = -1;
         while ((nextTry = cur.insert(row.getTimestamp(), row)) != cur.num) {
             if (nextTry != -1) {
-                cur = getPage(nextTry);
+                cur = getPage(TimeSortedPage.class, nextTry);
                 continue;
             }
             // 申请新的一页插入
@@ -104,28 +107,47 @@ public class VinStorage {
      * @return
      */
     private synchronized int grow() {
-        return ++pageCount;
+        return pageCount++;
     }
 
-    public <P extends AbPage> P creatPage(Class<P> pClass) {
+    public <P extends AbPage> P newPage(Class<P> pClass, int newPageNum) {
+        if (newPageNum == -1) {
+            throw new IllegalStateException("未识别的页号");
+        }
+
         P page = null;
-        int newPageNum = -1;
         try {
             Constructor<P> constructor = pClass.getConstructor(VinStorage.class, BufferPool.class, Integer.class);
-            newPageNum = grow();
             page = constructor.newInstance(this, COMMON_POOL, newPageNum);
         } catch (Exception e) {
             e.printStackTrace();
         }
-        if (newPageNum == -1) {
-            throw new IllegalStateException("未识别");
-        }
+        return page;
+    }
+
+    public <P extends AbPage> P creatPage(Class<P> pClass) {
+        int newPageNum = grow();
+        P page = newPage(pClass, newPageNum);
         pageMap.put(newPageNum, page);
         return page;
     }
 
-    public <P extends AbPage> P getPage(int pageNum) {
-        return (P) pageMap.get(pageNum);
+    public <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
+        if (pageNum >= pageCount) {
+            return null;
+        }
+        AbPage page = pageMap.computeIfAbsent(pageNum, k -> {
+            // 该页已经在内存中释放，从文件中恢复
+            AbPage p = newPage(pClass, pageNum);
+            try {
+                p.recover();
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new IllegalStateException(pageNum + "号页恢复异常");
+            }
+            return p;
+        });
+        return (P) page;
     }
 
     public List<String> schema() {

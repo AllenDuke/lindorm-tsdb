@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 
 class ExtPage extends AbPage {
 
-    public ExtPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+    public ExtPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
         super(vinStorage, bufferPool, num);
     }
 

@@ -9,7 +9,7 @@ import java.util.*;
 
 public class TimeSortedPage extends AbPage {
 
-    public TimeSortedPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+    public TimeSortedPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
         super(vinStorage, bufferPool, num);
         leftNum = -1;
         rightNum = -1;
@@ -49,6 +49,16 @@ public class TimeSortedPage extends AbPage {
      * 如果extNum!=-1，那么表示当前大行的大小
      */
     private int rowCountOrBigRowSize;
+
+    @Override
+    public synchronized void recover() throws IOException {
+        if (stat != PageStat.FLUSHED) {
+            return;
+        }
+        super.recover();
+        recoverHead();
+        recoverAll();
+    }
 
     private synchronized void recoverHead() throws IOException {
         if (stat != PageStat.FLUSHED) {
@@ -92,6 +102,8 @@ public class TimeSortedPage extends AbPage {
         } else {
             recoverLarge();
         }
+
+        stat = PageStat.RECOVERED_ALL;
     }
 
     private void recoverLarge() {
@@ -139,7 +151,7 @@ public class TimeSortedPage extends AbPage {
             }
             columns.put(columnName, cVal);
         }
-        Row bigRow = new Row(null, timestamp, columns);
+        Row bigRow = new Row(vinStorage.vin(), timestamp, columns);
         rowMap.put(timestamp, bigRow);
     }
 
@@ -239,13 +251,17 @@ public class TimeSortedPage extends AbPage {
                 }
                 columns.put(columnName, cVal);
             }
-            Row bigRow = new Row(null, timestamp, columns);
+            Row bigRow = new Row(vinStorage.vin(), timestamp, columns);
             rowMap.put(timestamp, bigRow);
         }
     }
 
     @Override
-    public void flush() throws IOException {
+    public synchronized void flush() throws IOException {
+        if (stat == PageStat.FLUSHED) {
+            return;
+        }
+
         if (rowMap.isEmpty()) {
             throw new IllegalStateException("刷盘异常，页数据为空");
         }
@@ -270,6 +286,8 @@ public class TimeSortedPage extends AbPage {
         // 释放内存
         rowMap.clear();
         extPageList = null;
+
+        stat = PageStat.FLUSHED;
     }
 
     private void firstInsert(long k, Row v) {

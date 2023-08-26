@@ -7,6 +7,7 @@ import com.alibaba.lindorm.contest.structs.Vin;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -49,6 +50,8 @@ public class VinStorage {
      */
     private Row latestRow;
 
+    private boolean isShutDown = false;
+
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
         this.path = path;
@@ -62,7 +65,7 @@ public class VinStorage {
         if (!dbFile.exists()) {
             dbFile.createNewFile();
         }
-        dbChannel = new FileInputStream(dbFile).getChannel();
+        dbChannel = new RandomAccessFile(dbFile, "rw").getChannel();
         creatPage(TimeSortedPage.class);
     }
 
@@ -202,5 +205,19 @@ public class VinStorage {
 
     public ArrayList<ColumnValue.ColumnType> columnTypeList() {
         return columnTypeList;
+    }
+
+    public synchronized void shutdown() throws IOException {
+        if (isShutDown) {
+            return;
+        }
+        for (AbPage page : pageMap.values()) {
+            page.flush();
+        }
+        isShutDown = true;
+    }
+
+    public Vin vin() {
+        return vin;
     }
 }

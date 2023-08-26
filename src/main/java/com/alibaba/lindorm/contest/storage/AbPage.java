@@ -37,7 +37,7 @@ public abstract class AbPage {
 
     protected PageStat stat;
 
-    public AbPage(VinStorage vinStorage, BufferPool bufferPool, int num) {
+    public AbPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
         this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
@@ -67,11 +67,16 @@ public abstract class AbPage {
     /**
      * 数据刷盘
      */
-    public void flush() throws IOException {
+    public synchronized void flush() throws IOException {
+        if (stat == PageStat.FLUSHED) {
+            return;
+        }
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
+        vinStorage.dbChannel().position(PAGE_SIZE * num);
         vinStorage.dbChannel().write(dataBuffer.unwrap());
         lock.release();
 
         bufferPool.free(dataBuffer);
+        stat = PageStat.FLUSHED;
     }
 }

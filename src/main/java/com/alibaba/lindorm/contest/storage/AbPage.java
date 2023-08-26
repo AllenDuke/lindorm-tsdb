@@ -71,9 +71,9 @@ public abstract class AbPage {
         if (stat == PageStat.FLUSHED) {
             return;
         }
+        dataBuffer.unwrap().position(0);
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        vinStorage.dbChannel().position(PAGE_SIZE * num);
-        vinStorage.dbChannel().write(dataBuffer.unwrap());
+        vinStorage.dbChannel().write(dataBuffer.unwrap(), PAGE_SIZE * num);
         lock.release();
 
         bufferPool.free(dataBuffer);

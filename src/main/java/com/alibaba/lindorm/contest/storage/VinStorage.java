@@ -80,7 +80,8 @@ public class VinStorage {
         TimeSortedPage cur;
         Stack<TimeSortedPage> traceStack = new Stack<>();
         traceStack.push(maxPage);
-        while ((cur = traceStack.pop()) != null) {
+        while (!traceStack.isEmpty()) {
+            cur = traceStack.pop();
             WindowSearchResult result = cur.search(request);
             List<Row> rowList = result.getRowList();
             if (rowList != null) {

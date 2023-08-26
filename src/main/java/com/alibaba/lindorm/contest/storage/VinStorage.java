@@ -172,7 +172,7 @@ public class VinStorage {
     }
 
     public <P extends AbPage> P creatPage(Class<P> pClass) {
-        int newPageNum = pageCount.incrementAndGet();
+        int newPageNum = pageCount.getAndIncrement();
         P page = newPage(pClass, newPageNum);
         pageMap.put(newPageNum, page);
         if (page instanceof TimeSortedPage) {

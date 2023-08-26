@@ -195,7 +195,6 @@ public class TimeSortedPage extends AbPage {
         dataBuffer.unwrap().putInt(rowMap.size());
 
         for (Row row : rowMap.values()) {
-            dataBuffer.unwrap().putInt(rowSize(row));
             dataBuffer.unwrap().putLong(row.getTimestamp());
             List<String> columnNameList = vinStorage.columnNameList();
             for (String columnName : columnNameList) {
@@ -222,7 +221,7 @@ public class TimeSortedPage extends AbPage {
         ArrayList<ColumnValue.ColumnType> columnTypeList = vinStorage.columnTypeList();
         ArrayList<String> columnNameList = vinStorage.columnNameList();
 
-        int rowCount = dataBuffer.unwrap().getInt();
+        int rowCount = rowCountOrBigRowSize;
         for (int i = 0; i < rowCount; i++) {
             long timestamp = dataBuffer.unwrap().getLong();
             Map<String, ColumnValue> columns = new HashMap<>();
@@ -242,9 +241,8 @@ public class TimeSortedPage extends AbPage {
                     case COLUMN_TYPE_STRING:
                         int strLen = dataBuffer.unwrap().getInt();
                         byte[] strBytes = new byte[strLen];
-                        ByteBuffer strBuffer = dataBuffer.unwrap().get(strBytes);
-                        strBuffer.flip();
-                        cVal = new ColumnValue.StringColumn(strBuffer);
+                        dataBuffer.unwrap().get(strBytes);
+                        cVal = new ColumnValue.StringColumn(ByteBuffer.wrap(strBytes));
                         break;
                     default:
                         throw new IllegalStateException("Undefined column type, this is not expected");

@@ -33,7 +33,7 @@ public class TimeSortedPage extends AbPage {
      */
     private long maxTime;
 
-    private TreeMap<Long, Row> map = new TreeMap<>();
+    private final TreeMap<Long, Row> rowMap = new TreeMap<>();
 
     private List<ExtPage> extPageList;
 
@@ -64,13 +64,13 @@ public class TimeSortedPage extends AbPage {
             nextExtNum = extPage.nextExt();
         }
 
-        stat = PageStat.USING;
+        stat = PageStat.RECOVERED_HEAD;
     }
 
 
     private void flushLarge() {
         // 没办法，需要进行一次额外的内存拷贝
-        Row bigRow = map.firstEntry().getValue();
+        Row bigRow = rowMap.firstEntry().getValue();
         int rowSize = rowSize(bigRow);
         ByteBuffer allocate = ByteBuffer.allocate(rowSize);
 
@@ -95,7 +95,7 @@ public class TimeSortedPage extends AbPage {
             flushLarge();
         }
 
-        for (Row row : map.values()) {
+        for (Row row : rowMap.values()) {
             dataBuffer.unwrap().putInt(rowSize(row));
             List<String> columnNameList = vinStorage.schema();
             for (String columnName : columnNameList) {
@@ -120,7 +120,7 @@ public class TimeSortedPage extends AbPage {
         super.flush();
 
         // 释放内存
-        map.clear();
+        rowMap.clear();
         extPageList.clear();
     }
 
@@ -148,7 +148,7 @@ public class TimeSortedPage extends AbPage {
             extPageList.add(extPage);
         }
 
-        map.put(k, v);
+        rowMap.put(k, v);
     }
 
     /**
@@ -160,7 +160,7 @@ public class TimeSortedPage extends AbPage {
      */
     public int insert(long k, Row v) throws IOException {
         recover();
-        if (!map.isEmpty() && (k < minTime || k > maxTime)) {
+        if (!rowMap.isEmpty() && (k < minTime || k > maxTime)) {
             // 不能插入当前节点
             if (k < minTime) {
                 return leftNum;
@@ -171,12 +171,12 @@ public class TimeSortedPage extends AbPage {
 
         // 准备插入当前节点
         synchronized (this) {
-            if (map.isEmpty()) {
+            if (rowMap.isEmpty()) {
                 first(k, v);
             }
 
             // 插入map
-            map.put(k, v);
+            rowMap.put(k, v);
 
             // 4字节记录行数据大小，接着记录行数据
             int vTotalSize = rowSize(v);
@@ -192,7 +192,7 @@ public class TimeSortedPage extends AbPage {
                 if (transfer == null) {
                     transfer = new LinkedList<>();
                 }
-                lastEntry = map.pollLastEntry();
+                lastEntry = rowMap.pollLastEntry();
                 transfer.add(lastEntry.getValue());
                 position -= 4 + rowSize(lastEntry.getValue());
             }
@@ -205,7 +205,7 @@ public class TimeSortedPage extends AbPage {
                 // 调整链表
                 this.connect(newPage);
             }
-            if (map.isEmpty() && lastEntry != null) {
+            if (rowMap.isEmpty() && lastEntry != null) {
                 // 当前的第一个节点即为大节点
                 insertLarge(k, v, vTotalSize);
                 return num;

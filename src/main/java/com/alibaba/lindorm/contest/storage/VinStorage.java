@@ -1,12 +1,10 @@
 package com.alibaba.lindorm.contest.storage;
 
-import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
@@ -14,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class VinStorage {
 
@@ -24,11 +23,15 @@ public class VinStorage {
 
     private final Vin vin;
 
-    private TimeSortedPage root;
+    /**
+     * 最大页号页，因为插入序列是时序有关的，所以可以认为超90%的数据序列本事是时间升序的，所以每次插入/查询时，从最大页号页开始遍历。
+     * 创建新页时，自动更新
+     */
+    private TimeSortedPage maxPage;
 
     private FileChannel dbChannel;
 
-    private int pageCount;
+    private AtomicInteger pageCount = new AtomicInteger(0);
 
     private final String path;
 
@@ -43,7 +46,6 @@ public class VinStorage {
         this.vin = vin;
         this.path = path;
         this.columnNameList = columnNameList;
-        this.pageCount = 0;
     }
 
     private void init() throws IOException {
@@ -53,7 +55,7 @@ public class VinStorage {
             dbFile.createNewFile();
         }
         dbChannel = new FileInputStream(dbFile).getChannel();
-        root = new TimeSortedPage(this, COMMON_POOL, grow());
+        creatPage(TimeSortedPage.class);
     }
 
     public boolean insert(Row row) throws IOException {
@@ -71,7 +73,7 @@ public class VinStorage {
         /**
          * 从根节点开始寻找 插入
          */
-        TimeSortedPage cur = root;
+        TimeSortedPage cur = maxPage;
         int nextTry = -1;
         while ((nextTry = cur.insert(row.getTimestamp(), row)) != cur.num) {
             if (nextTry != -1) {
@@ -94,20 +96,11 @@ public class VinStorage {
      * @return
      */
     public long size() {
-        return pageCount * AbPage.PAGE_SIZE;
+        return pageCount.get() * AbPage.PAGE_SIZE;
     }
 
     public FileChannel dbChannel() {
         return dbChannel;
-    }
-
-    /**
-     * 文件页数增长。
-     *
-     * @return
-     */
-    private synchronized int grow() {
-        return pageCount++;
     }
 
     public <P extends AbPage> P newPage(Class<P> pClass, int newPageNum) {
@@ -125,15 +118,22 @@ public class VinStorage {
         return page;
     }
 
+    private synchronized void updateMaxPage(TimeSortedPage page) {
+        this.maxPage = page;
+    }
+
     public <P extends AbPage> P creatPage(Class<P> pClass) {
-        int newPageNum = grow();
+        int newPageNum = pageCount.incrementAndGet();
         P page = newPage(pClass, newPageNum);
         pageMap.put(newPageNum, page);
+        if (page instanceof TimeSortedPage) {
+            updateMaxPage((TimeSortedPage) page);
+        }
         return page;
     }
 
     public <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
-        if (pageNum >= pageCount) {
+        if (pageNum >= pageCount.get()) {
             return null;
         }
         AbPage page = pageMap.computeIfAbsent(pageNum, k -> {

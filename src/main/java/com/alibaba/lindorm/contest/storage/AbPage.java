@@ -41,7 +41,7 @@ public abstract class AbPage {
         this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
-        stat = PageStat.USING;
+        stat = PageStat.NEW;
     }
 
     public synchronized void recover() throws IOException {
@@ -60,7 +60,7 @@ public abstract class AbPage {
         }
 
         dataBuffer.unwrap().flip();
-        stat = PageStat.USING;
+        stat = PageStat.RECOVERED;
     }
 
     /**

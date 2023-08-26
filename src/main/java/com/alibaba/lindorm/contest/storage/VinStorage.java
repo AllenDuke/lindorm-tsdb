@@ -5,7 +5,6 @@ import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
@@ -50,7 +49,7 @@ public class VinStorage {
      */
     private Row latestRow;
 
-    private boolean isShutDown = false;
+    private boolean connected = false;
 
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
@@ -209,13 +208,13 @@ public class VinStorage {
     }
 
     public synchronized void shutdown() throws IOException {
-        if (isShutDown) {
+        if (connected) {
             return;
         }
         for (AbPage page : pageMap.values()) {
             page.flush();
         }
-        isShutDown = true;
+        connected = true;
     }
 
     public Vin vin() {

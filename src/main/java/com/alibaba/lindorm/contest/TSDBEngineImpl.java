@@ -97,8 +97,6 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
         });
 
-        columnsName.clear();
-        columnsType.clear();
         connected = false;
     }
 
@@ -115,10 +113,7 @@ public class TSDBEngineImpl extends TSDBEngine {
     public ArrayList<Row> executeLatestQuery(LatestQueryRequest pReadReq) throws IOException {
         ArrayList<Row> ans = new ArrayList<>();
         for (Vin vin : pReadReq.getVins()) {
-            VinStorage vinStorage = VIN_STORAGE_MAP.get(vin);
-            if (vinStorage == null) {
-                continue;
-            }
+            VinStorage vinStorage = VIN_STORAGE_MAP.computeIfAbsent(vin, k -> new VinStorage(vin, dataPath.getPath(), columnsName, columnsType));
             Row latestRow = vinStorage.latest();
             if (latestRow == null) {
                 continue;
@@ -136,10 +131,7 @@ public class TSDBEngineImpl extends TSDBEngine {
     @Override
     public ArrayList<Row> executeTimeRangeQuery(TimeRangeQueryRequest trReadReq) throws IOException {
         Vin vin = trReadReq.getVin();
-        VinStorage vinStorage = VIN_STORAGE_MAP.get(vin);
-        if (vinStorage == null) {
-            return new ArrayList<>(0);
-        }
+        VinStorage vinStorage = VIN_STORAGE_MAP.computeIfAbsent(vin, k -> new VinStorage(vin, dataPath.getPath(), columnsName, columnsType));
         ArrayList<Row> window = vinStorage.window(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound());
         ArrayList<Row> ans = new ArrayList<>(window.size());
         for (Row row : window) {

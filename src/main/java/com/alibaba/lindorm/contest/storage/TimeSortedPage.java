@@ -52,10 +52,11 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED) {
+        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
             return;
         }
         super.recover();
+        stat = PageStat.FLUSHED;
         recoverHead();
         recoverAll();
     }
@@ -340,6 +341,20 @@ public class TimeSortedPage extends AbPage {
         extNum = extPageList.get(0).num;
 
         rowMap.put(k, v);
+        updateTimeWindow();
+    }
+
+    private void updateTimeWindow() {
+        minTime = rowMap.firstKey();
+        maxTime = rowMap.lastKey();
+    }
+
+    public synchronized Row latestRow() throws IOException {
+        if (rowMap != null && !rowMap.isEmpty()) {
+            return rowMap.lastEntry().getValue();
+        }
+        recover();
+        return rowMap.lastEntry().getValue();
     }
 
     public synchronized WindowSearchResult search(WindowSearchRequest request) throws IOException {
@@ -375,6 +390,15 @@ public class TimeSortedPage extends AbPage {
         map.remove(rightTime);
         Collection<Row> rows = map.values();
         result.setRowList(new LinkedList<>(rows));
+
+        if (leftTime < minTime) {
+            // 需要继续往左寻找
+            result.setNextLeft(this.leftNum);
+        }
+        if (rightTime > maxTime) {
+            // 需要继续往右寻找
+            result.setNextRight(this.rightNum);
+        }
         return result;
     }
 
@@ -390,10 +414,12 @@ public class TimeSortedPage extends AbPage {
 
         // 这里不用rowMap是否empty来判断页是否为空，因为recoverHead不会去构建rowMap
         if ((minTime != -1 && maxTime != -1) && (k < minTime || k > maxTime)) {
-            // 不能插入当前节点
             if (k < minTime) {
+                // 不能插入当前节点
                 return leftNum;
-            } else {
+            } else if (dataBuffer.unwrap().remaining() < rowSize(v)) {
+                // 剩下已经不足以插入，提前退出
+                flush();
                 return rightNum;
             }
         }
@@ -444,6 +470,7 @@ public class TimeSortedPage extends AbPage {
         if (rowMap.isEmpty() && lastEntry != null) {
             // 当前的第一个节点即为大节点
             insertLarge(k, v, newRowSize);
+            checkAndFlush();
             return num;
         }
         if (transfer != null && !transfer.isEmpty()) {
@@ -457,7 +484,8 @@ public class TimeSortedPage extends AbPage {
         }
 
         dataBuffer.unwrap().position(position);
-
+        updateTimeWindow();
+        checkAndFlush();
         return num;
     }
 
@@ -484,6 +512,7 @@ public class TimeSortedPage extends AbPage {
                 oldRPage.leftNum = page.num;
                 page.rightNum = oldRPage.num;
             }
+            page.leftNum = this.num;
             this.rightNum = page.num;
         }
         if (page.maxTime < this.minTime) {
@@ -493,6 +522,7 @@ public class TimeSortedPage extends AbPage {
                 oldLPage.rightNum = page.num;
                 page.leftNum = page.num;
             }
+            page.rightNum = this.num;
             this.leftNum = page.num;
         }
     }
@@ -531,5 +561,11 @@ public class TimeSortedPage extends AbPage {
         }
 
         return size;
+    }
+
+    private void checkAndFlush() throws IOException {
+        if (dataBuffer.unwrap().remaining() < (8 + 4)) {
+            flush();
+        }
     }
 }

@@ -16,7 +16,7 @@ public class BufferPool {
      */
     private final long size;
 
-    private long available;
+    private volatile long available;
 
     private final List<VinStorage> vinStorageList;
 
@@ -30,7 +30,7 @@ public class BufferPool {
 
         scheduler = new Thread(() -> {
             while (true) {
-                while (getAvailable() < size * 0.7) {
+                while (available < size * 0.5) {
                     schedule();
                 }
                 try {
@@ -75,13 +75,9 @@ public class BufferPool {
         }
     }
 
-    private long getAvailable() {
-        return available;
-    }
-
     public synchronized PooledByteBuffer allocate() {
         int need = (int) AbPage.PAGE_SIZE;
-        while (need > getAvailable()) {
+        while (need > available) {
             // 申请失败 当前线程帮助调度
             schedule();
         }

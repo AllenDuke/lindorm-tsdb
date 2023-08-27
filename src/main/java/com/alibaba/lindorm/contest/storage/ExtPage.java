@@ -18,7 +18,7 @@ class ExtPage extends AbPage {
 
     @Override
     public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED) {
+        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
             return;
         }
 

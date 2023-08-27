@@ -97,7 +97,31 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
         });
 
+        try {
+            File schemaFile = new File(getDataPath(), "schema.txt");
+            schemaFile.delete();
+            schemaFile.createNewFile();
+            BufferedWriter writer = new BufferedWriter(new FileWriter(schemaFile));
+            writer.write(schemaToString());
+            writer.close();
+        } catch (IOException e) {
+            System.err.println("Error saving the schema");
+            throw new RuntimeException(e);
+        }
+
         connected = false;
+    }
+
+    private String schemaToString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(columnsNum);
+        for (int i = 0; i < columnsNum; ++i) {
+            sb.append(",")
+                    .append(columnsName.get(i))
+                    .append(",")
+                    .append(columnsType.get(i));
+        }
+        return sb.toString();
     }
 
     @Override
@@ -105,7 +129,11 @@ public class TSDBEngineImpl extends TSDBEngine {
         for (Row row : wReq.getRows()) {
             Vin vin = row.getVin();
             VinStorage vinStorage = VIN_STORAGE_MAP.computeIfAbsent(vin, k -> new VinStorage(vin, dataPath.getPath(), columnsName, columnsType));
-            vinStorage.insert(row);
+            try {
+                vinStorage.insert(row);
+            } catch (Throwable throwable) {
+                throwable.printStackTrace();
+            }
         }
     }
 

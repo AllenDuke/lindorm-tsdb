@@ -19,30 +19,22 @@
  * limitations under the License.
  */
 
-import com.alibaba.lindorm.contest.CommonUtils;
-import com.alibaba.lindorm.contest.DemoTSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
 import com.alibaba.lindorm.contest.TSDBEngineImpl;
-import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.LatestQueryRequest;
 import com.alibaba.lindorm.contest.structs.Row;
-import com.alibaba.lindorm.contest.structs.Schema;
 import com.alibaba.lindorm.contest.structs.TimeRangeQueryRequest;
 import com.alibaba.lindorm.contest.structs.Vin;
-import com.alibaba.lindorm.contest.structs.WriteRequest;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
-public class TestMyDb {
+public class TestMyDbReadOnly {
     public static void main(String[] args) {
 
         File dataDir = new File("data_dir");
@@ -51,50 +43,10 @@ public class TestMyDb {
             throw new IllegalStateException("Clean the directory before we start the demo");
         }
 
-        CommonUtils.cleanDir(dataDir, true);
-
-        boolean ret = dataDir.mkdirs();
-        if (!ret) {
-            throw new IllegalStateException("Cannot create the temp data directory: " + dataDir);
-        }
-
         TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
         String str = "12345678912345678";
 
         try {
-            // Stage1: write
-            tsdbEngineSample.connect();
-
-            Map<String, ColumnValue> columns = new HashMap<>();
-            ByteBuffer buffer = ByteBuffer.allocate(3);
-            buffer.put((byte) 70);
-            buffer.put((byte) 71);
-            buffer.put((byte) 72);
-            buffer.flip();
-            columns.put("col1", new ColumnValue.IntegerColumn(123));
-            columns.put("col2", new ColumnValue.DoubleFloatColumn(1.23));
-            columns.put("col3", new ColumnValue.StringColumn(buffer));
-
-
-            Map<String, ColumnValue.ColumnType> cols = new HashMap<>();
-            cols.put("col1", ColumnValue.ColumnType.COLUMN_TYPE_INTEGER);
-            cols.put("col2", ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT);
-            cols.put("col3", ColumnValue.ColumnType.COLUMN_TYPE_STRING);
-            Schema schema = new Schema(cols);
-
-            tsdbEngineSample.createTable("test", schema);
-
-            for (int i = 0; i < 100; i++) {
-                ArrayList<Row> rowList = new ArrayList<>();
-                for (int j = 0; j < 10; j++) {
-                    rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), i * 10 + j, columns));
-                }
-                tsdbEngineSample.upsert(new WriteRequest("test", rowList));
-            }
-
-            tsdbEngineSample.shutdown();
-
-            // Stage2: read
             tsdbEngineSample.connect();
 
             ArrayList<Vin> vinList = new ArrayList<>();

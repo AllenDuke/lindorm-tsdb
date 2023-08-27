@@ -46,8 +46,7 @@ public abstract class AbPage {
     }
 
     public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED) {
-            // 没刷盘，不需要恢复
+        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
             return;
         }
 

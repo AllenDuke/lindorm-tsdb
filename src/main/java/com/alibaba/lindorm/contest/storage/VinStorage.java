@@ -1,12 +1,11 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -18,14 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class VinStorage {
 
     /**
-     * 内存的60%用来做内存页
+     * 内存的30%用来做内存页
      */
-    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.6));
-
-    static {
-        long mB = Runtime.getRuntime().totalMemory() / 1024 / 10124;
-        System.out.println("COMMON_POOL管理内存大小：" + mB);
-    }
+    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.3));
 
     private final Vin vin;
 
@@ -34,6 +28,10 @@ public class VinStorage {
      * 创建新页时，自动更新
      */
     private TimeSortedPage maxPage;
+
+    private File dbFile;
+
+    private File indexFile;
 
     private FileChannel dbChannel;
 
@@ -65,17 +63,38 @@ public class VinStorage {
         COMMON_POOL.register(this);
     }
 
-    private void init() throws IOException {
+    private synchronized void init() throws IOException {
+        if (connected) {
+            return;
+        }
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
-        File dbFile = new File(path, vinStr + ".db");
+        dbFile = new File(path, vinStr + ".db");
+        indexFile = new File(path, vinStr + ".idx");
         if (!dbFile.exists()) {
             dbFile.createNewFile();
         }
+        if (!indexFile.exists()) {
+            indexFile.createNewFile();
+        }
         dbChannel = new RandomAccessFile(dbFile, "rw").getChannel();
-        creatPage(TimeSortedPage.class);
+        if (dbChannel.size() > 0) {
+            // 从文件中恢复
+            FileInputStream inputStream = new FileInputStream(indexFile);
+            pageCount.set(CommonUtils.readInt(inputStream));
+            int maxPageNum = CommonUtils.readInt(inputStream);
+            inputStream.close();
+            maxPage = getPage(TimeSortedPage.class, maxPageNum);
+            latestRow = maxPage.latestRow();
+        } else {
+            creatPage(TimeSortedPage.class);
+        }
+
+        connected = true;
     }
 
     public synchronized ArrayList<Row> window(long minTime, long maxTime) throws IOException {
+        init();
+
         if (maxPage == null) {
             return new ArrayList<>(0);
         }
@@ -106,11 +125,14 @@ public class VinStorage {
         return rows;
     }
 
-    public Row latest() {
+    public Row latest() throws IOException {
+        init();
         return latestRow;
     }
 
     public boolean insert(Row row) throws IOException {
+        init();
+
         synchronized (this) {
             if (latestRow == null || row.getTimestamp() >= latestRow.getTimestamp()) {
                 latestRow = row;
@@ -142,6 +164,8 @@ public class VinStorage {
 
             // 调整链表
             cur.connect(next);
+
+            break;
         }
         return true;
     }
@@ -190,7 +214,7 @@ public class VinStorage {
     }
 
     public <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
-        if (pageNum < 0 || pageNum >= pageCount.get()) {
+        if (connected && (pageNum < 0 || pageNum >= pageCount.get())) {
             return null;
         }
         AbPage page = pageMap.computeIfAbsent(pageNum, k -> {
@@ -216,13 +240,19 @@ public class VinStorage {
     }
 
     public synchronized void shutdown() throws IOException {
-        if (connected) {
+        if (!connected) {
             return;
         }
         for (AbPage page : pageMap.values()) {
             page.flush();
         }
-        connected = true;
+        FileOutputStream outputStream = new FileOutputStream(indexFile);
+        CommonUtils.writeInt(outputStream, pageCount.get());
+        CommonUtils.writeInt(outputStream, maxPage.num);
+        outputStream.flush();
+        outputStream.close();
+        dbChannel.close();
+        connected = false;
     }
 
     public Vin vin() {

@@ -370,7 +370,10 @@ public class TimeSortedPage extends AbPage {
         // 当前页存在数据
         recoverAll();
 
-        Collection<Row> rows = rowMap.tailMap(leftTime).headMap(rightTime).values();
+        // 左闭右开区间
+        SortedMap<Long, Row> map = rowMap.tailMap(leftTime).headMap(rightTime);
+        map.remove(rightTime);
+        Collection<Row> rows = map.values();
         result.setRowList(new LinkedList<>(rows));
         return result;
     }

@@ -12,6 +12,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class VinStorage {
@@ -42,7 +43,7 @@ public class VinStorage {
     /**
      * todo 释放内存
      */
-    private final Map<Integer, AbPage> pageMap = new ConcurrentHashMap<>();
+    private final ConcurrentSkipListMap<Integer, AbPage> pageMap = new ConcurrentSkipListMap<>();
 
     /**
      * 保存最新的
@@ -56,6 +57,7 @@ public class VinStorage {
         this.path = path;
         this.columnNameList = columnNameList;
         this.columnTypeList = columnTypeList;
+        COMMON_POOL.register(this);
     }
 
     private void init() throws IOException {
@@ -219,5 +221,14 @@ public class VinStorage {
 
     public Vin vin() {
         return vin;
+    }
+
+    public void flushOldPage() throws IOException {
+        for (AbPage page : pageMap.values()) {
+            if (page.stat != PageStat.FLUSHED) {
+                page.flush();
+                return;
+            }
+        }
     }
 }

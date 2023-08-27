@@ -1,10 +1,8 @@
 package com.alibaba.lindorm.contest.storage;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class BufferPool {
 
@@ -20,9 +18,30 @@ public class BufferPool {
 
     private long available;
 
+    private final List<VinStorage> vinStorageList;
+
+    private Thread scheduler;
+
     public BufferPool(long size) {
         this.size = size;
         available = size;
+
+        vinStorageList = new ArrayList<>();
+
+        scheduler = new Thread(() -> {
+            while (true) {
+                while (getAvailable() < size * 0.7) {
+                    schedule();
+                }
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }, "buffer-scheduler");
+        scheduler.setDaemon(true);
+        scheduler.start();
     }
 
     private Set<PooledByteBuffer> free;
@@ -34,9 +53,37 @@ public class BufferPool {
      */
     private ByteBuffer miniBuffer;
 
-    public synchronized PooledByteBuffer allocate(int need) {
-        if (need > available) {
-            return null;
+    private int lastScheduleVinStorage = -1;
+
+    public void register(VinStorage vinStorage) {
+        vinStorageList.add(vinStorage);
+    }
+
+    private synchronized void schedule() {
+        lastScheduleVinStorage++;
+        if (lastScheduleVinStorage == vinStorageList.size()) {
+            lastScheduleVinStorage = 0;
+        }
+        if (vinStorageList.isEmpty()) {
+            return;
+        }
+        try {
+            vinStorageList.get(lastScheduleVinStorage).flushOldPage();
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new IllegalStateException("调度刷盘异常");
+        }
+    }
+
+    private long getAvailable() {
+        return available;
+    }
+
+    public synchronized PooledByteBuffer allocate() {
+        int need = (int) AbPage.PAGE_SIZE;
+        while (need > getAvailable()) {
+            // 申请失败 当前线程帮助调度
+            schedule();
         }
         PooledByteBuffer pooledByteBuffer;
         if (free != null && !free.isEmpty()) {

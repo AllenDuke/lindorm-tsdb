@@ -41,7 +41,7 @@ public abstract class AbPage {
         this.vinStorage = vinStorage;
         this.bufferPool = bufferPool;
         this.num = num;
-        this.dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
+        this.dataBuffer = bufferPool.allocate();
         stat = PageStat.NEW;
     }
 
@@ -51,7 +51,7 @@ public abstract class AbPage {
             return;
         }
 
-        dataBuffer = bufferPool.allocate((int) PAGE_SIZE);
+        dataBuffer = bufferPool.allocate();
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().read(dataBuffer.unwrap(), PAGE_SIZE * num);
         lock.release();

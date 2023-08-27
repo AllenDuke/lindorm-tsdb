@@ -185,12 +185,12 @@ public class VinStorage {
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
-        System.out.println(vin.toString() + "当前最大页号：" + newPageNum);
+//        System.out.println(vin.toString() + "当前最大页号：" + newPageNum);
         return page;
     }
 
     public <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
-        if (pageNum >= pageCount.get()) {
+        if (pageNum < 0 || pageNum >= pageCount.get()) {
             return null;
         }
         AbPage page = pageMap.computeIfAbsent(pageNum, k -> {

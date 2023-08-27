@@ -150,11 +150,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             Row clone = deepClone(row);
             Vin vin = clone.getVin();
             VinStorage vinStorage = VIN_STORAGE_MAP.computeIfAbsent(vin, k -> new VinStorage(vin, dataPath.getPath(), columnsName, columnsType));
-            try {
-                vinStorage.insert(clone);
-            } catch (Throwable throwable) {
-                throwable.printStackTrace();
-            }
+            vinStorage.insert(clone);
         }
     }
 

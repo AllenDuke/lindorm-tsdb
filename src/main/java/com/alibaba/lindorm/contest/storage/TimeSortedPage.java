@@ -185,10 +185,16 @@ public class TimeSortedPage extends AbPage {
         }
         allocate.flip();
 
-        dataBuffer.unwrap().put(allocate);
+        int remaining = dataBuffer.unwrap().remaining();
+        dataBuffer.unwrap().put(allocate.slice().limit(remaining));
+        allocate.position(remaining);
         for (ExtPage extPage : extPageList) {
-            extPage.putData(allocate);
+            int dataCapacity = extPage.dataCapacity();
+            ByteBuffer dataBuffer = allocate.slice();
+            extPage.putData(dataBuffer.limit(Math.min(dataCapacity, dataBuffer.limit())));
             extPage.flush();
+
+            allocate.position(dataCapacity);
         }
     }
 

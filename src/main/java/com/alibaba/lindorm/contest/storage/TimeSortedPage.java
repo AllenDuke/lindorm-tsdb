@@ -413,19 +413,27 @@ public class TimeSortedPage extends AbPage {
     public synchronized int insert(long k, Row v) throws IOException {
         recoverHead();
 
-        // 这里不用rowMap是否empty来判断页是否为空，因为recoverHead不会去构建rowMap
-        if ((minTime != -1 && maxTime != -1) && (k < minTime || k > maxTime)) {
+        if (minTime != -1 && extNum != -1) {
+            // 当前页存放的是大节点，不接受不相等的数据插入
             if (k < minTime) {
-                // 不能插入当前节点
                 return leftNum;
+            } else if (k > maxTime) {
+                return rightNum;
             }
-//            else if (dataBuffer.unwrap().remaining() < rowSize(v)) {
-//                // 剩下已经不足以插入，提前退出
-//                // todo
-//                flush();
-//                return rightNum;
-//            }
         }
+
+        // 这里不用rowMap是否empty来判断页是否为空，因为recoverHead不会去构建rowMap
+        if (minTime != -1 && extNum == -1 && k < minTime) {
+            // 不能插入当前节点
+            return leftNum;
+        }
+
+        /**
+         * 到达此处可能的case:
+         * 1。当前存放的是大节点，发生更新
+         * 2.当前存放的是小节点，k>=minTime
+         * 3.当前页还没有数据
+         */
 
         // 准备插入当前节点
 
@@ -481,6 +489,7 @@ public class TimeSortedPage extends AbPage {
             List<Row> transferToNewPage = new LinkedList<>();
             if (this.rightNum == -1) {
                 // 转移到新的一页
+                needCreatNewPage = true;
                 transferToNewPage.addAll(transfer);
             } else {
                 // 转移到后一页

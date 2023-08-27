@@ -130,6 +130,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         Map<String, ColumnValue> columns = row.getColumns();
         Map<String, ColumnValue> columnsClone = new HashMap<>(columns.size());
         columns.forEach((k, v) -> {
+
             if (v.getColumnType() == ColumnValue.ColumnType.COLUMN_TYPE_STRING) {
                 ByteBuffer stringValue = v.getStringValue();
                 ByteBuffer allocate = ByteBuffer.allocate(stringValue.limit());
@@ -137,9 +138,9 @@ public class TSDBEngineImpl extends TSDBEngine {
                 allocate.flip();
 
                 // 只有这个是可能会变的 其他都是final的
-                ColumnValue.StringColumn clone = new ColumnValue.StringColumn(allocate);
-                columnsClone.put(k, clone);
+                v = new ColumnValue.StringColumn(allocate);
             }
+            columnsClone.put(k, v);
         });
         return new Row(row.getVin(), row.getTimestamp(), columnsClone);
     }

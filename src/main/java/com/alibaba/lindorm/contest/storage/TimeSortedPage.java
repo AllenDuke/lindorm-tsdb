@@ -477,20 +477,30 @@ public class TimeSortedPage extends AbPage {
             return num;
         }
         if (transfer != null && !transfer.isEmpty()) {
+            boolean needCreatNewPage = false;
+            List<Row> transferToNewPage = new LinkedList<>();
             if (this.rightNum == -1) {
                 // 转移到新的一页
-                TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
-                for (Row row : transfer) {
-                    newPage.insert(row.getTimestamp(), row);
-                }
-                // 调整链表
-                this.connect(newPage);
+                transferToNewPage.addAll(transfer);
             } else {
                 // 转移到后一页
                 TimeSortedPage rightPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
                 for (Row row : transfer) {
-                    rightPage.insert(row.getTimestamp(), row);
+                    // transfer是按时间倒序的
+                    if (!needCreatNewPage && rightPage.insert(row.getTimestamp(), row) == this.num) {
+                        transferToNewPage.add(row);
+                        needCreatNewPage = true;
+                    }
+                    transferToNewPage.add(row);
                 }
+            }
+            if (needCreatNewPage) {
+                TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
+                for (Row row : transferToNewPage) {
+                    newPage.insert(row.getTimestamp(), row);
+                }
+                // 调整链表
+                this.connect(newPage);
             }
         }
 

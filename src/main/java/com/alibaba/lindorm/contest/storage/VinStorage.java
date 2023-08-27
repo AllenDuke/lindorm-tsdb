@@ -22,6 +22,11 @@ public class VinStorage {
      */
     private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.6));
 
+    static {
+        long mB = Runtime.getRuntime().totalMemory() / 1024 / 10124;
+        System.out.println("COMMON_POOL管理内存大小：" + mB);
+    }
+
     private final Vin vin;
 
     /**
@@ -32,7 +37,7 @@ public class VinStorage {
 
     private FileChannel dbChannel;
 
-    private AtomicInteger pageCount = new AtomicInteger(0);
+    private final AtomicInteger pageCount = new AtomicInteger(0);
 
     private final String path;
 
@@ -154,7 +159,7 @@ public class VinStorage {
         return dbChannel;
     }
 
-    public <P extends AbPage> P newPage(Class<P> pClass, int newPageNum) {
+    private <P extends AbPage> P newPage(Class<P> pClass, int newPageNum) {
         if (newPageNum == -1) {
             throw new IllegalStateException("未识别的页号");
         }
@@ -180,6 +185,7 @@ public class VinStorage {
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
+        System.out.println(vin.toString() + "当前最大页号：" + newPageNum);
         return page;
     }
 

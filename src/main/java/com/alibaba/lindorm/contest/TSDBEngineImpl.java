@@ -11,6 +11,8 @@ import com.alibaba.lindorm.contest.storage.VinStorage;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -124,13 +126,32 @@ public class TSDBEngineImpl extends TSDBEngine {
         return sb.toString();
     }
 
+    private Row deepClone(Row row) {
+        Map<String, ColumnValue> columns = row.getColumns();
+        Map<String, ColumnValue> columnsClone = new HashMap<>(columns.size());
+        columns.forEach((k, v) -> {
+            if (v.getColumnType() == ColumnValue.ColumnType.COLUMN_TYPE_STRING) {
+                ByteBuffer stringValue = v.getStringValue();
+                ByteBuffer allocate = ByteBuffer.allocate(stringValue.limit());
+                allocate.put(stringValue);
+                allocate.flip();
+
+                // 只有这个是可能会变的 其他都是final的
+                ColumnValue.StringColumn clone = new ColumnValue.StringColumn(allocate);
+                columnsClone.put(k, clone);
+            }
+        });
+        return new Row(row.getVin(), row.getTimestamp(), columnsClone);
+    }
+
     @Override
     public void upsert(WriteRequest wReq) throws IOException {
         for (Row row : wReq.getRows()) {
-            Vin vin = row.getVin();
+            Row clone = deepClone(row);
+            Vin vin = clone.getVin();
             VinStorage vinStorage = VIN_STORAGE_MAP.computeIfAbsent(vin, k -> new VinStorage(vin, dataPath.getPath(), columnsName, columnsType));
             try {
-                vinStorage.insert(row);
+                vinStorage.insert(clone);
             } catch (Throwable throwable) {
                 throwable.printStackTrace();
             }

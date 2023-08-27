@@ -6,7 +6,7 @@ import java.nio.channels.FileLock;
 public abstract class AbPage {
 
     /**
-     * 页大小4k
+     * 页大小16k
      */
     public static long PAGE_SIZE = 16 * 1024;
 

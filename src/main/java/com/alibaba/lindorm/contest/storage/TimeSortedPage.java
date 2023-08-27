@@ -308,6 +308,7 @@ public class TimeSortedPage extends AbPage {
      */
     private void insertLarge(long k, Row v, int newRowSize) {
 //        rowCountOrBigRowSize = vTotalSize;
+        System.out.println("发现大节点" + newRowSize);
 
         // 4字节保存行大小
         int totalSize = newRowSize + 4;
@@ -417,11 +418,13 @@ public class TimeSortedPage extends AbPage {
             if (k < minTime) {
                 // 不能插入当前节点
                 return leftNum;
-            } else if (dataBuffer.unwrap().remaining() < rowSize(v)) {
-                // 剩下已经不足以插入，提前退出
-                flush();
-                return rightNum;
             }
+//            else if (dataBuffer.unwrap().remaining() < rowSize(v)) {
+//                // 剩下已经不足以插入，提前退出
+//                // todo
+//                flush();
+//                return rightNum;
+//            }
         }
 
         // 准备插入当前节点
@@ -474,13 +477,21 @@ public class TimeSortedPage extends AbPage {
             return num;
         }
         if (transfer != null && !transfer.isEmpty()) {
-            // 转移到新的一页
-            TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
-            for (Row row : transfer) {
-                newPage.insert(row.getTimestamp(), row);
+            if (this.rightNum == -1) {
+                // 转移到新的一页
+                TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
+                for (Row row : transfer) {
+                    newPage.insert(row.getTimestamp(), row);
+                }
+                // 调整链表
+                this.connect(newPage);
+            } else {
+                // 转移到后一页
+                TimeSortedPage rightPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
+                for (Row row : transfer) {
+                    rightPage.insert(row.getTimestamp(), row);
+                }
             }
-            // 调整链表
-            this.connect(newPage);
         }
 
         dataBuffer.unwrap().position(position);

@@ -125,27 +125,21 @@ public class VinStorage {
         return rows;
     }
 
-    public Row latest() throws IOException {
+    public synchronized Row latest() throws IOException {
         init();
         return latestRow;
     }
 
-    public boolean insert(Row row) throws IOException {
+    public synchronized boolean insert(Row row) throws IOException {
         init();
 
-        synchronized (this) {
-            if (latestRow == null || row.getTimestamp() >= latestRow.getTimestamp()) {
-                latestRow = row;
-            }
+        if (latestRow == null || row.getTimestamp() >= latestRow.getTimestamp()) {
+            latestRow = row;
+        }
 
-            Vin vin = row.getVin();
-            if (!this.vin.equals(vin)) {
-                return false;
-            }
-
-            if (maxPage == null) {
-                init();
-            }
+        Vin vin = row.getVin();
+        if (!this.vin.equals(vin)) {
+            return false;
         }
 
         /**

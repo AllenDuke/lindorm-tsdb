@@ -540,6 +540,7 @@ public class TimeSortedPage extends AbPage {
      * @param page
      */
     public synchronized void connect(TimeSortedPage page) {
+        updateTimeWindow();
         checkConnect(page);
         if (page.minTime > this.maxTime) {
             // page为this的右节点

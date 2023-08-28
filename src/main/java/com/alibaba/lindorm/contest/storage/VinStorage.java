@@ -52,6 +52,11 @@ public class VinStorage {
      */
     private Row latestRow;
 
+    /**
+     * 最新行所在页
+     */
+    private int latestPageNum;
+
     private boolean connected = false;
 
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
@@ -81,9 +86,10 @@ public class VinStorage {
             FileInputStream inputStream = new FileInputStream(indexFile);
             pageCount.set(CommonUtils.readInt(inputStream));
             int maxPageNum = CommonUtils.readInt(inputStream);
+            latestPageNum = CommonUtils.readInt(inputStream);
             inputStream.close();
             maxPage = getPage(TimeSortedPage.class, maxPageNum);
-            latestRow = maxPage.latestRow();
+            latestRow = getPage(TimeSortedPage.class, latestPageNum).latestRow();
         } else {
             creatPage(TimeSortedPage.class);
         }
@@ -151,13 +157,19 @@ public class VinStorage {
                 cur = getPage(TimeSortedPage.class, nextTry);
                 continue;
             }
-            // 申请新的一页插入
-            TimeSortedPage next = creatPage(TimeSortedPage.class);
+
+            // 在当前的左边申请新的一页插入
+            TimeSortedPage left = creatPage(TimeSortedPage.class);
             // insert前调整链表，因为insert可能会导致flush
-            cur.connectBeforeFlushing(next);
-            next.insert(row.getTimestamp(), row);
+            left.connectRightBeforeFlushingByForce(cur);
+            left.insert(row.getTimestamp(), row);
+
+            maxPage = cur;
 
             break;
+        }
+        if (row.getTimestamp() >= latestRow.getTimestamp() && nextTry != -1) {
+            latestPageNum = nextTry;
         }
         return true;
     }
@@ -245,6 +257,7 @@ public class VinStorage {
         FileOutputStream outputStream = new FileOutputStream(indexFile);
         CommonUtils.writeInt(outputStream, pageCount.get());
         CommonUtils.writeInt(outputStream, maxPage.num);
+        CommonUtils.writeInt(outputStream, latestPageNum);
         outputStream.flush();
         outputStream.close();
         dbChannel.close();

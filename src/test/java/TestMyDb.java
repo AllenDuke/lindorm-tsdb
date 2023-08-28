@@ -107,7 +107,7 @@ public class TestMyDb {
 
             rowList.clear();
             columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(10)));
-            Row smallRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 1234, columns);
+            Row smallRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);
             rowList.add(smallRow);
             tsdbEngineSample.upsert(new WriteRequest("test", rowList));
 
@@ -129,7 +129,7 @@ public class TestMyDb {
             showResult(resultSet);
 
             resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 10000));
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 100));
             showResult(resultSet);
 
             tsdbEngineSample.shutdown();

@@ -300,8 +300,8 @@ public class TimeSortedPage extends AbPage {
     private void firstInsert(long k, Row v) {
         minTime = k;
         maxTime = k;
-        leftNum = -1;
-        rightNum = -1;
+//        leftNum = -1;
+//        rightNum = -1;
 
         extNum = -1;
 //        rowCountOrBigRowSize = rowSize(v);
@@ -518,7 +518,7 @@ public class TimeSortedPage extends AbPage {
             }
             if (needCreatNewPage) {
                 TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
-                this.connectBeforeFlushing(newPage);
+                this.connectRightBeforeFlushingByForce(newPage);
                 for (Row row : transferToNewPage) {
                     newPage.insert(row.getTimestamp(), row);
                 }
@@ -539,22 +539,26 @@ public class TimeSortedPage extends AbPage {
         }
     }
 
+    public synchronized void connectRightBeforeFlushingByForce(TimeSortedPage right) {
+        TimeSortedPage oldRPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
+        if (oldRPage != null) {
+            oldRPage.leftNum = right.num;
+            right.rightNum = oldRPage.num;
+        }
+        right.leftNum = this.num;
+        this.rightNum = right.num;
+    }
+
     /**
      * 在当前和anotherPage发生flush前，连接起来
      *
      * @param anotherPage
      */
     public synchronized void connectBeforeFlushing(TimeSortedPage anotherPage) throws IOException {
-//        checkConnect(anotherPage);
+        checkConnect(anotherPage);
         if (anotherPage.minTime > this.maxTime) {
             // page为this的右节点
-            TimeSortedPage oldRPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
-            if (oldRPage != null) {
-                oldRPage.leftNum = anotherPage.num;
-                anotherPage.rightNum = oldRPage.num;
-            }
-            anotherPage.leftNum = this.num;
-            this.rightNum = anotherPage.num;
+            connectRightBeforeFlushingByForce(anotherPage);
         }
         if (anotherPage.maxTime < this.minTime) {
             // page为this的左节点

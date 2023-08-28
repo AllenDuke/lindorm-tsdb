@@ -116,7 +116,8 @@ public class TimeSortedPage extends AbPage {
         ByteBuffer allocate = ByteBuffer.allocate(rowCountOrBigRowSize);
         allocate.put(dataBuffer.unwrap());
         for (ExtPage extPage : extPageList) {
-            allocate.put(extPage.getData());
+            ByteBuffer dataBuffer = extPage.getData();
+            allocate.put(dataBuffer);
         }
         allocate.flip();
 
@@ -158,9 +159,9 @@ public class TimeSortedPage extends AbPage {
         // 没办法，需要进行一次额外的内存拷贝
         Row bigRow = rowMap.firstEntry().getValue();
         int bigRowSize = rowSize(bigRow);
+        dataBuffer.unwrap().putInt(bigRowSize);
 
-        ByteBuffer allocate = ByteBuffer.allocate(4 + bigRowSize);
-        allocate.putInt(bigRowSize);
+        ByteBuffer allocate = ByteBuffer.allocate(bigRowSize);
 
         allocate.putLong(bigRow.getTimestamp());
         List<String> columnNameList = vinStorage.columnNameList();
@@ -189,10 +190,11 @@ public class TimeSortedPage extends AbPage {
         for (ExtPage extPage : extPageList) {
             int dataCapacity = extPage.dataCapacity();
             ByteBuffer dataBuffer = allocate.slice();
-            extPage.putData(dataBuffer.limit(Math.min(dataCapacity, dataBuffer.limit())));
+            dataBuffer.limit(Math.min(dataCapacity, allocate.remaining()));
+            extPage.putData(dataBuffer);
             extPage.flush();
 
-            allocate.position(dataCapacity);
+            allocate.position(allocate.position() + dataBuffer.limit());
         }
     }
 

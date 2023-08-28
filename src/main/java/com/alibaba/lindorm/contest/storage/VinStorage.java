@@ -10,7 +10,6 @@ import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -154,10 +153,9 @@ public class VinStorage {
             }
             // 申请新的一页插入
             TimeSortedPage next = creatPage(TimeSortedPage.class);
+            // insert前调整链表，因为insert可能会导致flush
+            cur.connectBeforeFlushing(next);
             next.insert(row.getTimestamp(), row);
-
-            // 调整链表
-            cur.connect(next);
 
             break;
         }
@@ -238,7 +236,11 @@ public class VinStorage {
             return;
         }
         for (AbPage page : pageMap.values()) {
-            page.flush();
+            try {
+                page.flush();
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
         }
         FileOutputStream outputStream = new FileOutputStream(indexFile);
         CommonUtils.writeInt(outputStream, pageCount.get());

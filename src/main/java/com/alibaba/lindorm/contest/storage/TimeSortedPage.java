@@ -267,6 +267,8 @@ public class TimeSortedPage extends AbPage {
             return;
         }
 
+        recoverAll();
+
         if (rowMap.isEmpty()) {
             throw new IllegalStateException("刷盘异常，页数据为空");
         }
@@ -312,7 +314,7 @@ public class TimeSortedPage extends AbPage {
      * @param k
      * @param v
      */
-    private void insertLarge(long k, Row v, int newRowSize) {
+    private void insertLarge(long k, Row v, int newRowSize) throws IOException {
 //        rowCountOrBigRowSize = vTotalSize;
         System.out.println("发现大节点" + newRowSize);
 
@@ -343,15 +345,15 @@ public class TimeSortedPage extends AbPage {
             for (int i = 0; i < extPageList.size() - 1; i++) {
                 extPageList.get(i).nextExt(extPageList.get(i + 1).num);
             }
+            extPageList.get(extPageList.size() - 1).nextExt(-1);
         }
 
         extNum = extPageList.get(0).num;
 
         rowMap.put(k, v);
-        updateTimeWindow();
     }
 
-    private void updateTimeWindow() {
+    private void updateTimeWindowBeforeFlushing() throws IOException {
         minTime = rowMap.firstKey();
         maxTime = rowMap.lastKey();
     }
@@ -487,9 +489,14 @@ public class TimeSortedPage extends AbPage {
         if (rowMap.isEmpty() && lastEntry != null) {
             // 当前的第一个节点即为大节点
             insertLarge(k, v, newRowSize);
+            updateTimeWindowBeforeFlushing();
             checkAndFlush();
             return num;
         }
+
+        // 当前的rowMap已经调整完毕，在可能发生页connect前updateTimeWindow
+        updateTimeWindowBeforeFlushing();
+
         if (transfer != null && !transfer.isEmpty()) {
             boolean needCreatNewPage = false;
             List<Row> transferToNewPage = new LinkedList<>();
@@ -511,16 +518,14 @@ public class TimeSortedPage extends AbPage {
             }
             if (needCreatNewPage) {
                 TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
+                this.connectBeforeFlushing(newPage);
                 for (Row row : transferToNewPage) {
                     newPage.insert(row.getTimestamp(), row);
                 }
-                // 调整链表
-                this.connect(newPage);
             }
         }
 
         dataBuffer.unwrap().position(position);
-        updateTimeWindow();
         checkAndFlush();
         return num;
     }
@@ -535,32 +540,31 @@ public class TimeSortedPage extends AbPage {
     }
 
     /**
-     * 连接另一页
+     * 在当前和anotherPage发生flush前，连接起来
      *
-     * @param page
+     * @param anotherPage
      */
-    public synchronized void connect(TimeSortedPage page) {
-        updateTimeWindow();
-        checkConnect(page);
-        if (page.minTime > this.maxTime) {
+    public synchronized void connectBeforeFlushing(TimeSortedPage anotherPage) throws IOException {
+//        checkConnect(anotherPage);
+        if (anotherPage.minTime > this.maxTime) {
             // page为this的右节点
             TimeSortedPage oldRPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
             if (oldRPage != null) {
-                oldRPage.leftNum = page.num;
-                page.rightNum = oldRPage.num;
+                oldRPage.leftNum = anotherPage.num;
+                anotherPage.rightNum = oldRPage.num;
             }
-            page.leftNum = this.num;
-            this.rightNum = page.num;
+            anotherPage.leftNum = this.num;
+            this.rightNum = anotherPage.num;
         }
-        if (page.maxTime < this.minTime) {
+        if (anotherPage.maxTime < this.minTime) {
             // page为this的左节点
             TimeSortedPage oldLPage = vinStorage.getPage(TimeSortedPage.class, this.leftNum);
             if (oldLPage != null) {
-                oldLPage.rightNum = page.num;
-                page.leftNum = page.num;
+                oldLPage.rightNum = anotherPage.num;
+                anotherPage.leftNum = anotherPage.num;
             }
-            page.rightNum = this.num;
-            this.leftNum = page.num;
+            anotherPage.rightNum = this.num;
+            this.leftNum = anotherPage.num;
         }
     }
 

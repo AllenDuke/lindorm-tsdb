@@ -29,6 +29,7 @@ class ExtPage extends AbPage {
         stat = PageStat.RECOVERED_HEAD;
     }
 
+
     /**
      * 返回连接的下一个扩展页
      *
@@ -40,6 +41,9 @@ class ExtPage extends AbPage {
 
     public void nextExt(int nextExtNum) {
         this.nextExtNum = nextExtNum;
+
+        dataBuffer.unwrap().position(0);
+        dataBuffer.unwrap().putInt(nextExtNum);
     }
 
     /**

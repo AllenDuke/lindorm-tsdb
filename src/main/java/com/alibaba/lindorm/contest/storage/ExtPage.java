@@ -64,7 +64,8 @@ class ExtPage extends AbPage {
      */
     public void putData(ByteBuffer byteBuffer) {
         dataSize = byteBuffer.limit();
-        dataBuffer.unwrap().position(8);
+        dataBuffer.unwrap().position(4);
+        dataBuffer.unwrap().putInt(dataSize);
         dataBuffer.unwrap().put(byteBuffer);
     }
 

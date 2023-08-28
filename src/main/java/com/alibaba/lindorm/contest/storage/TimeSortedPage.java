@@ -108,21 +108,19 @@ public class TimeSortedPage extends AbPage {
     }
 
     private void recoverLarge() {
-        long timestamp = dataBuffer.unwrap().getLong();
-
         /**
          * 大->小，rowCountOrBigRowSize使得数据准确。
          * 但当前扩展页只增不减，可能造成浪费
          */
 
-        ByteBuffer allocate = ByteBuffer.allocate(4 + rowCountOrBigRowSize);
-        allocate.position(8);
+        ByteBuffer allocate = ByteBuffer.allocate(rowCountOrBigRowSize);
         allocate.put(dataBuffer.unwrap());
         for (ExtPage extPage : extPageList) {
             allocate.put(extPage.getData());
         }
         allocate.flip();
-        allocate.position(8);
+
+        long timestamp = allocate.getLong();
 
         ArrayList<ColumnValue.ColumnType> columnTypeList = vinStorage.columnTypeList();
         ArrayList<String> columnNameList = vinStorage.columnNameList();

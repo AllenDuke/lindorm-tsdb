@@ -103,6 +103,7 @@ public class BufferPool {
         if (remove) {
             buffer.unwrap().clear();
             free.add(buffer);
+            available += buffer.unwrap().capacity();
         }
         return remove;
     }

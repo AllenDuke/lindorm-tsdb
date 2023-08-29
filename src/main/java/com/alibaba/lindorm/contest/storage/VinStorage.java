@@ -15,9 +15,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class VinStorage {
 
     /**
-     * 内存的30%用来做内存页
+     * 内存的10%用来做内存页
      */
-    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.3));
+    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.01));
 
     private static final LRULinkedHashMap<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>((COMMON_POOL.size() / AbPage.PAGE_SIZE) - 1);
 

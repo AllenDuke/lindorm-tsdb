@@ -77,9 +77,8 @@ public class BufferPool {
 
     public synchronized PooledByteBuffer allocate() {
         int need = (int) AbPage.PAGE_SIZE;
-        while (need > available) {
-            // 申请失败 当前线程帮助调度
-            schedule();
+        if (need > available) {
+            throw new IllegalStateException("页管理异常");
         }
         PooledByteBuffer pooledByteBuffer;
         if (free != null && !free.isEmpty()) {

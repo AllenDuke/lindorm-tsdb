@@ -78,4 +78,15 @@ public abstract class AbPage {
         bufferPool.free(dataBuffer);
         stat = PageStat.FLUSHED;
     }
+
+    @Override
+    public int hashCode() {
+        return vinStorage.vin().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        AbPage page = (AbPage) obj;
+        return this.num == page.num && this.hashCode() == page.hashCode();
+    }
 }

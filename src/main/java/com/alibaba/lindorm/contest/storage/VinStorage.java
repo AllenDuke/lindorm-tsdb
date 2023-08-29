@@ -10,7 +10,6 @@ import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class VinStorage {
@@ -19,6 +18,8 @@ public class VinStorage {
      * 内存的30%用来做内存页
      */
     private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.3));
+
+    private static final Map<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>(10);
 
     private final Vin vin;
 
@@ -41,11 +42,6 @@ public class VinStorage {
     private final ArrayList<String> columnNameList;
 
     private final ArrayList<ColumnValue.ColumnType> columnTypeList;
-
-    /**
-     * todo 释放内存
-     */
-    private final ConcurrentSkipListMap<Integer, AbPage> pageMap = new ConcurrentSkipListMap<>();
 
     /**
      * 保存最新的
@@ -209,7 +205,7 @@ public class VinStorage {
     public <P extends AbPage> P creatPage(Class<P> pClass) {
         int newPageNum = pageCount.getAndIncrement();
         P page = newPage(pClass, newPageNum);
-        pageMap.put(newPageNum, page);
+        PAGE_LRU.put(page, page);
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
@@ -221,17 +217,20 @@ public class VinStorage {
         if (connected && (pageNum < 0 || pageNum >= pageCount.get())) {
             return null;
         }
-        AbPage page = pageMap.computeIfAbsent(pageNum, k -> {
-            // 该页已经在内存中释放，从文件中恢复
-            AbPage p = newPage(pClass, pageNum);
-            try {
-                p.recover();
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new IllegalStateException(pageNum + "号页恢复异常");
-            }
-            return p;
-        });
+        P pageKey = newPage(pClass, pageNum);
+        AbPage page = PAGE_LRU.get(pageKey);
+        if (page != null) {
+            return (P) page;
+        }
+        // 该页已经在内存中释放，从文件中恢复
+        page = pageKey;
+        try {
+            page.recover();
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new IllegalStateException(pageNum + "号页恢复异常");
+        }
+
         return (P) page;
     }
 
@@ -243,17 +242,22 @@ public class VinStorage {
         return columnTypeList;
     }
 
-    public synchronized void shutdown() throws IOException {
-        if (!connected) {
-            return;
-        }
-        for (AbPage page : pageMap.values()) {
+    public static void flushAllPage() {
+        for (AbPage page : PAGE_LRU.values()) {
             try {
                 page.flush();
             } catch (Throwable e) {
                 e.printStackTrace();
             }
         }
+        PAGE_LRU.clear();
+    }
+
+    public synchronized void shutdown() throws IOException {
+        if (!connected) {
+            return;
+        }
+
         FileOutputStream outputStream = new FileOutputStream(indexFile);
         CommonUtils.writeInt(outputStream, pageCount.get());
         CommonUtils.writeInt(outputStream, maxPage.num);
@@ -269,7 +273,7 @@ public class VinStorage {
     }
 
     public void flushOldPage() throws IOException {
-        for (AbPage page : pageMap.values()) {
+        for (AbPage page : PAGE_LRU.values()) {
             if (page.stat != PageStat.FLUSHED) {
                 page.flush();
                 return;

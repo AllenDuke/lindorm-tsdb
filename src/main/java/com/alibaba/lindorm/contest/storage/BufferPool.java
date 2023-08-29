@@ -41,7 +41,7 @@ public class BufferPool {
             }
         }, "buffer-scheduler");
         scheduler.setDaemon(true);
-        scheduler.start();
+//        scheduler.start();
     }
 
     private Set<PooledByteBuffer> free;

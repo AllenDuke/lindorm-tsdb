@@ -12,13 +12,10 @@ import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
@@ -89,6 +86,8 @@ public class TSDBEngineImpl extends TSDBEngine {
         if (!connected) {
             return;
         }
+
+        VinStorage.flushAllPage();
 
         VIN_STORAGE_MAP.forEach((k, v) -> {
             try {

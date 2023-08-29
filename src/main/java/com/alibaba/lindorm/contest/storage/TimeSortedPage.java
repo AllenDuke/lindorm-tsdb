@@ -490,7 +490,7 @@ public class TimeSortedPage extends AbPage {
             // 当前的第一个节点即为大节点
             insertLarge(k, v, newRowSize);
             updateTimeWindowBeforeFlushing();
-            checkAndFlush();
+//            checkAndFlush();
             return num;
         }
 
@@ -526,7 +526,7 @@ public class TimeSortedPage extends AbPage {
         }
 
         dataBuffer.unwrap().position(position);
-        checkAndFlush();
+//        checkAndFlush();
         return num;
     }
 

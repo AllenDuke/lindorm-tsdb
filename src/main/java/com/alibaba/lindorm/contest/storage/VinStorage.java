@@ -19,7 +19,13 @@ public class VinStorage {
      */
     private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.3));
 
-    private static final Map<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>(COMMON_POOL.size() / AbPage.PAGE_SIZE);
+    private static final LRULinkedHashMap<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>((COMMON_POOL.size() / AbPage.PAGE_SIZE) - 1);
+
+    static {
+        System.out.println("jvm内存大小：" + Runtime.getRuntime().totalMemory() / 1024 / 1024 + "MB");
+        System.out.println("COMMON_POOL管理页数：" + COMMON_POOL.size() / AbPage.PAGE_SIZE + "页");
+        System.out.println("PAGE_LRU管理页数：" + PAGE_LRU.getMaxCapacity() + "页");
+    }
 
     private final Vin vin;
 

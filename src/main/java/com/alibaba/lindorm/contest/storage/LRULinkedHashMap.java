@@ -91,4 +91,8 @@ public class LRULinkedHashMap<K, V extends AbPage> extends LinkedHashMap<K, V> {
             lock.unlock();
         }
     }
+
+    public int getMaxCapacity() {
+        return maxCapacity;
+    }
 }

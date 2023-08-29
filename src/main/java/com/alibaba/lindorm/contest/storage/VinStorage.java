@@ -19,7 +19,7 @@ public class VinStorage {
      */
     private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.3));
 
-    private static final Map<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>(10);
+    private static final Map<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>(COMMON_POOL.size() / AbPage.PAGE_SIZE);
 
     private final Vin vin;
 
@@ -226,6 +226,7 @@ public class VinStorage {
         page = pageKey;
         try {
             page.recover();
+            PAGE_LRU.put(page, page);
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException(pageNum + "号页恢复异常");

@@ -15,9 +15,9 @@ public class LRULinkedHashMap<K, V extends AbPage> extends LinkedHashMap<K, V> {
 
     private final Lock lock = new ReentrantLock();
 
-    public LRULinkedHashMap(int maxCapacity) {
-        super(maxCapacity, DEFAULT_LOAD_FACTOR, true);
-        this.maxCapacity = maxCapacity;
+    public LRULinkedHashMap(long maxCapacity) {
+        super((int) maxCapacity, DEFAULT_LOAD_FACTOR, true);
+        this.maxCapacity = (int) maxCapacity;
     }
 
     @Override

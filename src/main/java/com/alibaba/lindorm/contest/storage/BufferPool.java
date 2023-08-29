@@ -107,4 +107,8 @@ public class BufferPool {
         }
         return remove;
     }
+
+    public long size() {
+        return size;
+    }
 }

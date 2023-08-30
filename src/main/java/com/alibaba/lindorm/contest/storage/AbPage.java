@@ -50,9 +50,10 @@ public abstract class AbPage {
         vinStorage.dbChannel().read(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();
 
-        if (memPage.unwrap().position() != memPage.unwrap().capacity()) {
-            throw new IllegalStateException("不是一个完整的buffer");
-        }
+        // todo 最后一个buffer可能不是满的
+//        if (memPage.unwrap().position() != memPage.unwrap().capacity()) {
+//            throw new IllegalStateException("不是一个完整的buffer");
+//        }
 
         memPage.unwrap().flip();
         stat = PageStat.RECOVERED;

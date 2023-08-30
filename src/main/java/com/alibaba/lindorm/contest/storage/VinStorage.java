@@ -1,6 +1,9 @@
 package com.alibaba.lindorm.contest.storage;
 
 import com.alibaba.lindorm.contest.CommonUtils;
+import com.alibaba.lindorm.contest.mem.MemPage;
+import com.alibaba.lindorm.contest.mem.MemPagePool;
+import com.alibaba.lindorm.contest.schedule.PageScheduler;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
@@ -14,27 +17,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class VinStorage {
 
-    /**
-     * 内存20%用来做内存页
-     */
-    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.2));
-
-    // fixme 多线程并发申请
-    private static final LRULinkedHashMap<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>((COMMON_POOL.size() / AbPage.PAGE_SIZE) - 200);
-
-    static {
-        System.out.println("jvm内存大小：" + Runtime.getRuntime().totalMemory() / 1024 / 1024 + "MB");
-        System.out.println("COMMON_POOL管理页数：" + COMMON_POOL.size() / AbPage.PAGE_SIZE + "页");
-        System.out.println("PAGE_LRU管理页数：" + PAGE_LRU.getMaxCapacity() + "页");
-    }
-
     private final Vin vin;
 
     /**
      * 最大页号页，因为插入序列是时序有关的，所以可以认为超90%的数据序列本事是时间升序的，所以每次插入/查询时，从最大页号页开始遍历。
      * 创建新页时，自动更新
      */
-    private TimeSortedPage maxPage;
+    private int maxTimeSortedPage = -1;
 
     private File dbFile;
 
@@ -53,12 +42,7 @@ public class VinStorage {
     /**
      * 保存最新的
      */
-    private Row latestRow;
-
-    /**
-     * 最新行所在页
-     */
-    private int latestPageNum;
+    private long latestRowKey = -1;
 
     private boolean connected = false;
 
@@ -67,7 +51,6 @@ public class VinStorage {
         this.path = path;
         this.columnNameList = columnNameList;
         this.columnTypeList = columnTypeList;
-        COMMON_POOL.register(this);
     }
 
     private synchronized void init() throws IOException {
@@ -88,13 +71,9 @@ public class VinStorage {
             // 从文件中恢复
             FileInputStream inputStream = new FileInputStream(indexFile);
             pageCount.set(CommonUtils.readInt(inputStream));
-            int maxPageNum = CommonUtils.readInt(inputStream);
-            latestPageNum = CommonUtils.readInt(inputStream);
+            maxTimeSortedPage = CommonUtils.readInt(inputStream);
+            latestRowKey = CommonUtils.readLong(inputStream);
             inputStream.close();
-            maxPage = getPage(TimeSortedPage.class, maxPageNum);
-            latestRow = getPage(TimeSortedPage.class, latestPageNum).latestRow();
-        } else {
-            creatPage(TimeSortedPage.class);
         }
 
         connected = true;
@@ -103,7 +82,7 @@ public class VinStorage {
     public synchronized ArrayList<Row> window(long minTime, long maxTime) throws IOException {
         init();
 
-        if (maxPage == null) {
+        if (maxTimeSortedPage == -1) {
             return new ArrayList<>(0);
         }
 
@@ -112,7 +91,7 @@ public class VinStorage {
 
         TimeSortedPage cur;
         Stack<TimeSortedPage> traceStack = new Stack<>();
-        traceStack.push(maxPage);
+        traceStack.push(getPage(TimeSortedPage.class, maxTimeSortedPage));
         while (!traceStack.isEmpty()) {
             cur = traceStack.pop();
             WindowSearchResult result = cur.search(request);
@@ -135,25 +114,36 @@ public class VinStorage {
 
     public synchronized Row latest() throws IOException {
         init();
-        return latestRow;
+        ArrayList<Row> window = window(latestRowKey, latestRowKey);
+        if (window.isEmpty()) {
+            return null;
+        }
+        return window.get(0);
     }
 
     public synchronized boolean insert(Row row) throws IOException {
-        init();
-
-        if (latestRow == null || row.getTimestamp() >= latestRow.getTimestamp()) {
-            latestRow = row;
-        }
-
         Vin vin = row.getVin();
         if (!this.vin.equals(vin)) {
             return false;
         }
 
+        init();
+
+        if (latestRowKey == -1 || row.getTimestamp() >= latestRowKey) {
+            latestRowKey = row.getTimestamp();
+        }
+
         /**
          * 从最大节点开始寻找 插入
          */
-        TimeSortedPage cur = maxPage;
+        TimeSortedPage cur;
+        if (maxTimeSortedPage == -1) {
+            cur = creatPage(TimeSortedPage.class);
+            maxTimeSortedPage = cur.num;
+        } else {
+            cur = getPage(TimeSortedPage.class, maxTimeSortedPage);
+        }
+
         int nextTry = -1;
         while ((nextTry = cur.insert(row.getTimestamp(), row)) != cur.num) {
             if (nextTry != -1) {
@@ -166,13 +156,7 @@ public class VinStorage {
             // insert前调整链表，因为insert可能会导致flush
             left.connectRightBeforeFlushingByForce(cur);
             left.insert(row.getTimestamp(), row);
-
-            maxPage = cur;
-
             break;
-        }
-        if (row.getTimestamp() >= latestRow.getTimestamp() && nextTry != -1) {
-            latestPageNum = nextTry;
         }
         return true;
     }
@@ -197,8 +181,8 @@ public class VinStorage {
 
         P page = null;
         try {
-            Constructor<P> constructor = pClass.getConstructor(VinStorage.class, BufferPool.class, Integer.class);
-            page = constructor.newInstance(this, COMMON_POOL, newPageNum);
+            Constructor<P> constructor = pClass.getConstructor(VinStorage.class, Integer.class);
+            page = constructor.newInstance(this, newPageNum);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -206,72 +190,52 @@ public class VinStorage {
     }
 
     private synchronized void updateMaxPage(TimeSortedPage page) {
-        this.maxPage = page;
+        this.maxTimeSortedPage = page.pageNum();
     }
 
-    public <P extends AbPage> P creatPage(Class<P> pClass) {
+    /**
+     * 在文件中开辟新的一页
+     *
+     * @param pClass
+     * @param <P>
+     * @return
+     */
+    protected  <P extends AbPage> P creatPage(Class<P> pClass) {
         int newPageNum = pageCount.getAndIncrement();
         P page = newPage(pClass, newPageNum);
-        PAGE_LRU.put(page, page);
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
-//        System.out.println(vin.toString() + "当前最大页号：" + newPageNum);
+        page.stat = PageStat.USING;
         return page;
     }
 
-    public <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
+    protected <P extends AbPage> P getPage(Class<P> pClass, int pageNum) {
         if (connected && (pageNum < 0 || pageNum >= pageCount.get())) {
             return null;
         }
         P pageKey = newPage(pClass, pageNum);
-        AbPage page = PAGE_LRU.get(pageKey);
-        if (page != null) {
+        AbPage page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
+        if (page.stat == PageStat.USING) {
+            // 该页还没有换出
             return (P) page;
         }
         // 该页已经在内存中释放，从文件中恢复
-        page = pageKey;
         try {
             page.recover();
-            PAGE_LRU.put(page, page);
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException(pageNum + "号页恢复异常");
         }
-
         return (P) page;
     }
 
-    public ArrayList<String> columnNameList() {
+    protected ArrayList<String> columnNameList() {
         return columnNameList;
     }
 
-    public ArrayList<ColumnValue.ColumnType> columnTypeList() {
+    protected ArrayList<ColumnValue.ColumnType> columnTypeList() {
         return columnTypeList;
-    }
-
-    public static void flushOldestPage() {
-        if (PAGE_LRU.isEmpty()) {
-            return;
-        }
-        AbPage first = PAGE_LRU.keySet().stream().findFirst().get();
-        PAGE_LRU.remove(first);
-        try {
-            first.flush();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void flushAllPage() {
-        for (AbPage page : PAGE_LRU.values()) {
-            try {
-                page.flush();
-            } catch (Throwable e) {
-                e.printStackTrace();
-            }
-        }
-        PAGE_LRU.clear();
     }
 
     public synchronized void shutdown() throws IOException {
@@ -281,8 +245,8 @@ public class VinStorage {
 
         FileOutputStream outputStream = new FileOutputStream(indexFile);
         CommonUtils.writeInt(outputStream, pageCount.get());
-        CommonUtils.writeInt(outputStream, maxPage.num);
-        CommonUtils.writeInt(outputStream, latestPageNum);
+        CommonUtils.writeInt(outputStream, maxTimeSortedPage);
+        CommonUtils.writeLong(outputStream, latestRowKey);
         outputStream.flush();
         outputStream.close();
         dbChannel.close();
@@ -293,12 +257,16 @@ public class VinStorage {
         return vin;
     }
 
-    public void flushOldPage() throws IOException {
-        for (AbPage page : PAGE_LRU.values()) {
-            if (page.stat != PageStat.FLUSHED) {
-                page.flush();
-                return;
-            }
+    /**
+     * 页过期，由调度器调用
+     *
+     * @param page
+     */
+    public synchronized void evict(AbPage page) {
+        try {
+            page.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

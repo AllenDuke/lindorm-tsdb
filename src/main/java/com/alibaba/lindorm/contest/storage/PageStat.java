@@ -3,9 +3,9 @@ package com.alibaba.lindorm.contest.storage;
 public enum PageStat {
 
     /**
-     * 新建
+     * 使用中，不需要recover
      */
-    NEW,
+    USING,
 
     /**
      * 从文件中恢复字节数据

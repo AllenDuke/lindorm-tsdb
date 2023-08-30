@@ -1,12 +1,14 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.mem.MemPagePool;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 class ExtPage extends AbPage {
 
-    public ExtPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
-        super(vinStorage, bufferPool, num);
+    public ExtPage(VinStorage vinStorage, MemPagePool memPagePool, Integer num) {
+        super(vinStorage, memPagePool, num);
     }
 
     /**

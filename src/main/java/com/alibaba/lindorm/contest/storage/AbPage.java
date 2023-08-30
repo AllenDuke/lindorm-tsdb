@@ -1,5 +1,8 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.mem.MemPagePool;
+import com.alibaba.lindorm.contest.mem.MemPage;
+
 import java.io.IOException;
 import java.nio.channels.FileLock;
 
@@ -26,56 +29,50 @@ public abstract class AbPage {
     protected final VinStorage vinStorage;
 
     /**
-     * 当前页所在的内存池
-     */
-    protected final BufferPool bufferPool;
-
-    /**
      * flush会释放，
      */
-    protected PooledByteBuffer dataBuffer;
+    protected MemPage memPage;
 
     protected PageStat stat;
 
-    public AbPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
+    public AbPage(VinStorage vinStorage, Integer num) {
         this.vinStorage = vinStorage;
-        this.bufferPool = bufferPool;
         this.num = num;
-        this.dataBuffer = bufferPool.allocate();
-        stat = PageStat.NEW;
     }
 
-    public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
+    public synchronized void map(MemPage memPage) {
+        this.memPage = memPage;
+    }
+
+    public void recover() throws IOException {
+        if (stat == PageStat.USING) {
             return;
         }
 
-        dataBuffer = bufferPool.allocate();
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        vinStorage.dbChannel().read(dataBuffer.unwrap(), PAGE_SIZE * num);
+        vinStorage.dbChannel().read(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();
 
-        if (dataBuffer.unwrap().position() != dataBuffer.unwrap().capacity()) {
+        if (memPage.unwrap().position() != memPage.unwrap().capacity()) {
             throw new IllegalStateException("不是一个完整的buffer");
         }
 
-        dataBuffer.unwrap().flip();
+        memPage.unwrap().flip();
         stat = PageStat.RECOVERED;
     }
 
     /**
      * 数据刷盘
      */
-    public synchronized void flush() throws IOException {
+    public void flush() throws IOException {
         if (stat == PageStat.FLUSHED) {
             return;
         }
-        dataBuffer.unwrap().position(0);
+        memPage.unwrap().position(0);
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
-        vinStorage.dbChannel().write(dataBuffer.unwrap(), PAGE_SIZE * num);
+        vinStorage.dbChannel().write(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();
 
-        bufferPool.free(dataBuffer);
         stat = PageStat.FLUSHED;
     }
 
@@ -88,5 +85,17 @@ public abstract class AbPage {
     public boolean equals(Object obj) {
         AbPage page = (AbPage) obj;
         return this.num == page.num && this.hashCode() == page.hashCode();
+    }
+
+    public VinStorage vinStorage() {
+        return vinStorage;
+    }
+
+    public int pageNum() {
+        return num;
+    }
+
+    public synchronized MemPage memPage() {
+        return memPage;
     }
 }

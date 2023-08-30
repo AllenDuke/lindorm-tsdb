@@ -1,5 +1,6 @@
 package com.alibaba.lindorm.contest.storage;
 
+import com.alibaba.lindorm.contest.mem.MemPagePool;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 
@@ -9,8 +10,8 @@ import java.util.*;
 
 public class TimeSortedPage extends AbPage {
 
-    public TimeSortedPage(VinStorage vinStorage, BufferPool bufferPool, Integer num) {
-        super(vinStorage, bufferPool, num);
+    public TimeSortedPage(VinStorage vinStorage, Integer num) {
+        super(vinStorage, num);
         leftNum = -1;
         rightNum = -1;
         minTime = -1;
@@ -51,40 +52,37 @@ public class TimeSortedPage extends AbPage {
     private int rowCountOrBigRowSize;
 
     @Override
-    public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
-            return;
-        }
+    public void recover() throws IOException {
         super.recover();
-        stat = PageStat.FLUSHED;
+
+        // 先恢复头数据
         recoverHead();
-        recoverAll();
     }
 
     private synchronized void recoverHead() throws IOException {
-        if (stat != PageStat.FLUSHED) {
+        if (stat == PageStat.RECOVERED_HEAD) {
             return;
         }
 
-        super.recover();
-
-        leftNum = dataBuffer.unwrap().getInt();
-        minTime = dataBuffer.unwrap().getLong();
-        rightNum = dataBuffer.unwrap().getInt();
-        maxTime = dataBuffer.unwrap().getLong();
-        extNum = dataBuffer.unwrap().getInt();
+        leftNum = memPage.unwrap().getInt();
+        minTime = memPage.unwrap().getLong();
+        rightNum = memPage.unwrap().getInt();
+        maxTime = memPage.unwrap().getLong();
+        extNum = memPage.unwrap().getInt();
         if (extNum != -1) {
             extPageList = new ArrayList<>();
         }
-        rowCountOrBigRowSize = dataBuffer.unwrap().getInt();
+        rowCountOrBigRowSize = memPage.unwrap().getInt();
 
         stat = PageStat.RECOVERED_HEAD;
     }
 
     private synchronized void recoverAll() throws IOException {
-        if (stat != PageStat.RECOVERED_HEAD) {
+        if (stat == PageStat.RECOVERED_ALL) {
             return;
         }
+
+        recoverHead();
 
         // 实际上也不会有循环recover
         int nextExtNum = extNum;
@@ -114,10 +112,10 @@ public class TimeSortedPage extends AbPage {
          */
 
         ByteBuffer allocate = ByteBuffer.allocate(rowCountOrBigRowSize);
-        allocate.put(dataBuffer.unwrap());
+        allocate.put(memPage.unwrap());
         for (ExtPage extPage : extPageList) {
-            ByteBuffer dataBuffer = extPage.getData();
-            allocate.put(dataBuffer);
+            ByteBuffer memPage = extPage.getData();
+            allocate.put(memPage);
         }
         allocate.flip();
 
@@ -159,7 +157,7 @@ public class TimeSortedPage extends AbPage {
         // 没办法，需要进行一次额外的内存拷贝
         Row bigRow = rowMap.firstEntry().getValue();
         int bigRowSize = rowSize(bigRow);
-        dataBuffer.unwrap().putInt(bigRowSize);
+        memPage.unwrap().putInt(bigRowSize);
 
         ByteBuffer allocate = ByteBuffer.allocate(bigRowSize);
 
@@ -184,38 +182,38 @@ public class TimeSortedPage extends AbPage {
         }
         allocate.flip();
 
-        int remaining = dataBuffer.unwrap().remaining();
-        dataBuffer.unwrap().put(allocate.slice().limit(remaining));
+        int remaining = memPage.unwrap().remaining();
+        memPage.unwrap().put(allocate.slice().limit(remaining));
         allocate.position(remaining);
         for (ExtPage extPage : extPageList) {
             int dataCapacity = extPage.dataCapacity();
-            ByteBuffer dataBuffer = allocate.slice();
-            dataBuffer.limit(Math.min(dataCapacity, allocate.remaining()));
-            extPage.putData(dataBuffer);
+            ByteBuffer memPage = allocate.slice();
+            memPage.limit(Math.min(dataCapacity, allocate.remaining()));
+            extPage.putData(memPage);
             extPage.flush();
 
-            allocate.position(allocate.position() + dataBuffer.limit());
+            allocate.position(allocate.position() + memPage.limit());
         }
     }
 
     private void flushNormal() {
-        dataBuffer.unwrap().putInt(rowMap.size());
+        memPage.unwrap().putInt(rowMap.size());
 
         for (Row row : rowMap.values()) {
-            dataBuffer.unwrap().putLong(row.getTimestamp());
+            memPage.unwrap().putLong(row.getTimestamp());
             List<String> columnNameList = vinStorage.columnNameList();
             for (String columnName : columnNameList) {
                 ColumnValue cVal = row.getColumns().get(columnName);
                 switch (cVal.getColumnType()) {
                     case COLUMN_TYPE_STRING:
-                        dataBuffer.unwrap().putInt(cVal.getStringValue().limit());
-                        dataBuffer.unwrap().put(cVal.getStringValue());
+                        memPage.unwrap().putInt(cVal.getStringValue().limit());
+                        memPage.unwrap().put(cVal.getStringValue());
                         break;
                     case COLUMN_TYPE_INTEGER:
-                        dataBuffer.unwrap().putInt(cVal.getIntegerValue());
+                        memPage.unwrap().putInt(cVal.getIntegerValue());
                         break;
                     case COLUMN_TYPE_DOUBLE_FLOAT:
-                        dataBuffer.unwrap().putDouble(cVal.getDoubleFloatValue());
+                        memPage.unwrap().putDouble(cVal.getDoubleFloatValue());
                         break;
                     default:
                         throw new IllegalStateException("Invalid column type");
@@ -230,7 +228,7 @@ public class TimeSortedPage extends AbPage {
 
         int rowCount = rowCountOrBigRowSize;
         for (int i = 0; i < rowCount; i++) {
-            long timestamp = dataBuffer.unwrap().getLong();
+            long timestamp = memPage.unwrap().getLong();
             Map<String, ColumnValue> columns = new HashMap<>();
             for (int j = 0; j < columnTypeList.size(); j++) {
                 ColumnValue.ColumnType columnType = columnTypeList.get(j);
@@ -238,17 +236,17 @@ public class TimeSortedPage extends AbPage {
                 ColumnValue cVal;
                 switch (columnType) {
                     case COLUMN_TYPE_INTEGER:
-                        int intVal = dataBuffer.unwrap().getInt();
+                        int intVal = memPage.unwrap().getInt();
                         cVal = new ColumnValue.IntegerColumn(intVal);
                         break;
                     case COLUMN_TYPE_DOUBLE_FLOAT:
-                        double doubleVal = dataBuffer.unwrap().getDouble();
+                        double doubleVal = memPage.unwrap().getDouble();
                         cVal = new ColumnValue.DoubleFloatColumn(doubleVal);
                         break;
                     case COLUMN_TYPE_STRING:
-                        int strLen = dataBuffer.unwrap().getInt();
+                        int strLen = memPage.unwrap().getInt();
                         byte[] strBytes = new byte[strLen];
-                        dataBuffer.unwrap().get(strBytes);
+                        memPage.unwrap().get(strBytes);
                         cVal = new ColumnValue.StringColumn(ByteBuffer.wrap(strBytes));
                         break;
                     default:
@@ -262,47 +260,33 @@ public class TimeSortedPage extends AbPage {
     }
 
     @Override
-    public synchronized void flush() throws IOException {
-        synchronized (this.vinStorage){
-            if (stat == PageStat.FLUSHED) {
-                return;
-            }
-
-            // 刚创建就被另外的线程要求刷盘
-//            if (leftNum == -1 && rightNum == -1 && minTime == -1 && maxTime == -1) {
-//                bufferPool.free(dataBuffer);
-//                return;
-//            }
-
-            recoverAll();
-
-            if (rowMap.isEmpty()) {
-                throw new IllegalStateException("刷盘异常，页数据为空");
-            }
-
-            dataBuffer.unwrap().position(0);
-            dataBuffer.unwrap().putInt(leftNum);
-            dataBuffer.unwrap().putLong(minTime);
-            dataBuffer.unwrap().putInt(rightNum);
-            dataBuffer.unwrap().putLong(maxTime);
-
-            if (extNum == -1) {
-                // 用extNum判断才是正确，因为当前页可能因为更新而大变小
-                dataBuffer.unwrap().putInt(-1);
-                flushNormal();
-            } else {
-                dataBuffer.unwrap().putInt(extPageList.get(0).num);
-                flushLarge();
-            }
-
-            super.flush();
-
-            // 释放内存
-            rowMap.clear();
-            extPageList = null;
-
-            stat = PageStat.FLUSHED;
+    public void flush() throws IOException {
+        if (rowMap.isEmpty()) {
+            throw new IllegalStateException("刷盘异常，页数据为空");
         }
+
+        memPage.unwrap().position(0);
+        memPage.unwrap().putInt(leftNum);
+        memPage.unwrap().putLong(minTime);
+        memPage.unwrap().putInt(rightNum);
+        memPage.unwrap().putLong(maxTime);
+
+        if (extNum == -1) {
+            // 用extNum判断才是正确，因为当前页可能因为更新而大变小
+            memPage.unwrap().putInt(-1);
+            flushNormal();
+        } else {
+            memPage.unwrap().putInt(extPageList.get(0).num);
+            flushLarge();
+        }
+
+        super.flush();
+
+        // 释放内存
+        rowMap.clear();
+        extPageList = null;
+
+        stat = PageStat.FLUSHED;
     }
 
     private void firstInsert(long k, Row v) {
@@ -313,7 +297,7 @@ public class TimeSortedPage extends AbPage {
 
         extNum = -1;
 //        rowCountOrBigRowSize = rowSize(v);
-        dataBuffer.unwrap().position(4 + 8 + 4 + 8 + 4 + 4);
+        memPage.unwrap().position(4 + 8 + 4 + 8 + 4 + 4);
     }
 
     /**
@@ -330,8 +314,8 @@ public class TimeSortedPage extends AbPage {
         int totalSize = newRowSize + 4;
 
         // 填满当前页
-        totalSize -= dataBuffer.unwrap().remaining();
-        dataBuffer.unwrap().position(dataBuffer.unwrap().limit());
+        totalSize -= memPage.unwrap().remaining();
+        memPage.unwrap().position(memPage.unwrap().limit());
 
         if (extPageList == null) {
             // 不为null表示更新
@@ -366,15 +350,7 @@ public class TimeSortedPage extends AbPage {
         maxTime = rowMap.lastKey();
     }
 
-    public synchronized Row latestRow() throws IOException {
-        if (rowMap != null && !rowMap.isEmpty()) {
-            return rowMap.lastEntry().getValue();
-        }
-        recover();
-        return rowMap.lastEntry().getValue();
-    }
-
-    public synchronized WindowSearchResult search(WindowSearchRequest request) throws IOException {
+    protected WindowSearchResult search(WindowSearchRequest request) throws IOException {
         recoverHead();
         WindowSearchResult result = new WindowSearchResult(this.num);
         if (this.minTime == -1 || this.maxTime == -1) {
@@ -426,7 +402,7 @@ public class TimeSortedPage extends AbPage {
      * @param v
      * @return 如果可插入当前节点，那么返回当前页号，否则返回下一个尝试插入的页号
      */
-    public synchronized int insert(long k, Row v) throws IOException {
+    protected int insert(long k, Row v) throws IOException {
         recoverHead();
 
         if (minTime != -1 && extNum != -1) {
@@ -463,7 +439,7 @@ public class TimeSortedPage extends AbPage {
         Row oldV = rowMap.put(k, v);
 
         // 准备调整指针
-        int position = dataBuffer.unwrap().position();
+        int position = memPage.unwrap().position();
 
         if (oldV != null) {
             // 发生更新
@@ -486,7 +462,7 @@ public class TimeSortedPage extends AbPage {
          */
         List<Row> transfer = null;
         Map.Entry<Long, Row> lastEntry = null;
-        while (position > dataBuffer.unwrap().limit()) {
+        while (position > memPage.unwrap().limit()) {
             if (transfer == null) {
                 transfer = new LinkedList<>();
             }
@@ -533,8 +509,7 @@ public class TimeSortedPage extends AbPage {
             }
         }
 
-        dataBuffer.unwrap().position(position);
-//        checkAndFlush();
+        memPage.unwrap().position(position);
         return num;
     }
 
@@ -547,7 +522,7 @@ public class TimeSortedPage extends AbPage {
         }
     }
 
-    public synchronized void connectRightBeforeFlushingByForce(TimeSortedPage right) {
+    protected void connectRightBeforeFlushingByForce(TimeSortedPage right) {
         TimeSortedPage oldRPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
         if (oldRPage != null) {
             oldRPage.leftNum = right.num;
@@ -555,29 +530,6 @@ public class TimeSortedPage extends AbPage {
         }
         right.leftNum = this.num;
         this.rightNum = right.num;
-    }
-
-    /**
-     * 在当前和anotherPage发生flush前，连接起来
-     *
-     * @param anotherPage
-     */
-    public synchronized void connectBeforeFlushing(TimeSortedPage anotherPage) throws IOException {
-        checkConnect(anotherPage);
-        if (anotherPage.minTime > this.maxTime) {
-            // page为this的右节点
-            connectRightBeforeFlushingByForce(anotherPage);
-        }
-        if (anotherPage.maxTime < this.minTime) {
-            // page为this的左节点
-            TimeSortedPage oldLPage = vinStorage.getPage(TimeSortedPage.class, this.leftNum);
-            if (oldLPage != null) {
-                oldLPage.rightNum = anotherPage.num;
-                anotherPage.leftNum = anotherPage.num;
-            }
-            anotherPage.rightNum = this.num;
-            this.leftNum = anotherPage.num;
-        }
     }
 
     /**
@@ -614,11 +566,5 @@ public class TimeSortedPage extends AbPage {
         }
 
         return size;
-    }
-
-    private void checkAndFlush() throws IOException {
-        if (dataBuffer.unwrap().remaining() < (8 + 4)) {
-            flush();
-        }
     }
 }

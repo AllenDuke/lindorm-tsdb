@@ -200,12 +200,13 @@ public class VinStorage {
      * @param <P>
      * @return
      */
-    protected  <P extends AbPage> P creatPage(Class<P> pClass) {
+    protected <P extends AbPage> P creatPage(Class<P> pClass) {
         int newPageNum = pageCount.getAndIncrement();
         P page = newPage(pClass, newPageNum);
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
+        page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
         page.stat = PageStat.USING;
         return page;
     }
@@ -216,7 +217,7 @@ public class VinStorage {
         }
         P pageKey = newPage(pClass, pageNum);
         AbPage page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
-        if (page.stat == PageStat.USING) {
+        if (page.stat != PageStat.KEY) {
             // 该页还没有换出
             return (P) page;
         }

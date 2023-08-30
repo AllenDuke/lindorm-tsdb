@@ -38,6 +38,7 @@ public abstract class AbPage {
     public AbPage(VinStorage vinStorage, Integer num) {
         this.vinStorage = vinStorage;
         this.num = num;
+        this.stat = PageStat.KEY;
     }
 
     public synchronized void map(MemPage memPage) {
@@ -45,10 +46,6 @@ public abstract class AbPage {
     }
 
     public void recover() throws IOException {
-        if (stat == PageStat.USING) {
-            return;
-        }
-
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().read(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();
@@ -65,9 +62,6 @@ public abstract class AbPage {
      * 数据刷盘
      */
     public void flush() throws IOException {
-        if (stat == PageStat.FLUSHED) {
-            return;
-        }
         memPage.unwrap().position(0);
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().write(memPage.unwrap(), PAGE_SIZE * num);

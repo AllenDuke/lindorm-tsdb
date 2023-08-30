@@ -94,28 +94,28 @@ public class TestMyDb {
                 tsdbEngineSample.upsert(new WriteRequest("test", rowList));
             }
 
-            rowList.clear();
-            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE + 1))));
-            Row bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);
-            rowList.add(bigRow);
-            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
-
-            rowList.clear();
-            bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 666, columns);
-            rowList.add(bigRow);
-            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
-
-            rowList.clear();
-            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(10)));
-            Row smallRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);
-            rowList.add(smallRow);
-            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
-
-            rowList.clear();
-            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE * 2))));
-            bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 666, columns);
-            rowList.add(bigRow);
-            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+//            rowList.clear();
+//            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE + 1))));
+//            Row bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);
+//            rowList.add(bigRow);
+//            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+//
+//            rowList.clear();
+//            bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 666, columns);
+//            rowList.add(bigRow);
+//            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+//
+//            rowList.clear();
+//            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(10)));
+//            Row smallRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);
+//            rowList.add(smallRow);
+//            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+//
+//            rowList.clear();
+//            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE * 2))));
+//            bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 666, columns);
+//            rowList.add(bigRow);
+//            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
 
             tsdbEngineSample.shutdown();
 

@@ -60,7 +60,7 @@ public class TimeSortedPage extends AbPage {
     }
 
     private synchronized void recoverHead() throws IOException {
-        if (stat == PageStat.RECOVERED_HEAD) {
+        if (stat == PageStat.RECOVERED_HEAD || stat == PageStat.USING) {
             return;
         }
 
@@ -78,7 +78,7 @@ public class TimeSortedPage extends AbPage {
     }
 
     private synchronized void recoverAll() throws IOException {
-        if (stat == PageStat.RECOVERED_ALL) {
+        if (stat == PageStat.USING) {
             return;
         }
 
@@ -102,7 +102,7 @@ public class TimeSortedPage extends AbPage {
             recoverLarge();
         }
 
-        stat = PageStat.RECOVERED_ALL;
+        stat = PageStat.USING;
     }
 
     private void recoverLarge() {
@@ -261,6 +261,8 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public void flush() throws IOException {
+        recoverAll();
+
         if (rowMap.isEmpty()) {
             throw new IllegalStateException("刷盘异常，页数据为空");
         }

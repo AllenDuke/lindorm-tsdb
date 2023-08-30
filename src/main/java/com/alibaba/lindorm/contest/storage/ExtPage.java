@@ -7,8 +7,8 @@ import java.nio.ByteBuffer;
 
 class ExtPage extends AbPage {
 
-    public ExtPage(VinStorage vinStorage, MemPagePool memPagePool, Integer num) {
-        super(vinStorage, memPagePool, num);
+    public ExtPage(VinStorage vinStorage, Integer num) {
+        super(vinStorage, num);
     }
 
     /**
@@ -20,14 +20,10 @@ class ExtPage extends AbPage {
 
     @Override
     public synchronized void recover() throws IOException {
-        if (stat != PageStat.FLUSHED && stat != PageStat.NEW) {
-            return;
-        }
-
         super.recover();
 
-        nextExtNum = dataBuffer.unwrap().getInt();
-        dataSize = dataBuffer.unwrap().getInt();
+        nextExtNum = memPage.unwrap().getInt();
+        dataSize = memPage.unwrap().getInt();
         stat = PageStat.RECOVERED_HEAD;
     }
 
@@ -44,8 +40,8 @@ class ExtPage extends AbPage {
     public void nextExt(int nextExtNum) {
         this.nextExtNum = nextExtNum;
 
-        dataBuffer.unwrap().position(0);
-        dataBuffer.unwrap().putInt(nextExtNum);
+        memPage.unwrap().position(0);
+        memPage.unwrap().putInt(nextExtNum);
     }
 
     /**
@@ -54,8 +50,8 @@ class ExtPage extends AbPage {
      * @return
      */
     public ByteBuffer getData() {
-        dataBuffer.unwrap().position(8);
-        ByteBuffer data = dataBuffer.unwrap().slice();
+        memPage.unwrap().position(8);
+        ByteBuffer data = memPage.unwrap().slice();
         return data.limit(dataSize);
     }
 
@@ -66,9 +62,9 @@ class ExtPage extends AbPage {
      */
     public void putData(ByteBuffer byteBuffer) {
         dataSize = byteBuffer.limit();
-        dataBuffer.unwrap().position(4);
-        dataBuffer.unwrap().putInt(dataSize);
-        dataBuffer.unwrap().put(byteBuffer);
+        memPage.unwrap().position(4);
+        memPage.unwrap().putInt(dataSize);
+        memPage.unwrap().put(byteBuffer);
     }
 
     /**
@@ -78,6 +74,6 @@ class ExtPage extends AbPage {
      */
     public int dataCapacity() {
         // 4字节的nextExt 4字节数据段大小
-        return dataBuffer.unwrap().limit() - 4 - 4;
+        return memPage.unwrap().limit() - 4 - 4;
     }
 }

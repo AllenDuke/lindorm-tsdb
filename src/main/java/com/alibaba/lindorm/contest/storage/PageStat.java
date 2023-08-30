@@ -3,6 +3,11 @@ package com.alibaba.lindorm.contest.storage;
 public enum PageStat {
 
     /**
+     * 页key状态
+     */
+    KEY,
+
+    /**
      * 使用中，不需要recover
      */
     USING,
@@ -16,11 +21,6 @@ public enum PageStat {
      * 恢复页头信息
      */
     RECOVERED_HEAD,
-
-    /**
-     * 恢复页结构化信息
-     */
-    RECOVERED_ALL,
 
     /**
      * 已刷盘

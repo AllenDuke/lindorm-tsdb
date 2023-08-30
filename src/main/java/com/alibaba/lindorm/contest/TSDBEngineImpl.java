@@ -7,6 +7,7 @@
 
 package com.alibaba.lindorm.contest;
 
+import com.alibaba.lindorm.contest.schedule.PageScheduler;
 import com.alibaba.lindorm.contest.storage.VinStorage;
 import com.alibaba.lindorm.contest.structs.*;
 
@@ -87,7 +88,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             return;
         }
 
-        VinStorage.flushAllPage();
+        PageScheduler.PAGE_SCHEDULER.shutdown();
 
         VIN_STORAGE_MAP.forEach((k, v) -> {
             try {

@@ -114,7 +114,7 @@ public class VinStorage {
 
     public synchronized Row latest() throws IOException {
         init();
-        ArrayList<Row> window = window(latestRowKey, latestRowKey);
+        ArrayList<Row> window = window(latestRowKey, latestRowKey + 1);
         if (window.isEmpty()) {
             return null;
         }

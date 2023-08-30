@@ -77,8 +77,9 @@ public class BufferPool {
 
     public synchronized PooledByteBuffer allocate() {
         int need = (int) AbPage.PAGE_SIZE;
-        if (need > available) {
-            throw new IllegalStateException("页管理异常");
+        while (need > available) {
+            System.out.println("最老页刷盘");
+            VinStorage.flushOldestPage();
         }
         PooledByteBuffer pooledByteBuffer;
         if (free != null && !free.isEmpty()) {

@@ -263,38 +263,46 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public synchronized void flush() throws IOException {
-        if (stat == PageStat.FLUSHED) {
-            return;
+        synchronized (this.vinStorage){
+            if (stat == PageStat.FLUSHED) {
+                return;
+            }
+
+            // 刚创建就被另外的线程要求刷盘
+//            if (leftNum == -1 && rightNum == -1 && minTime == -1 && maxTime == -1) {
+//                bufferPool.free(dataBuffer);
+//                return;
+//            }
+
+            recoverAll();
+
+            if (rowMap.isEmpty()) {
+                throw new IllegalStateException("刷盘异常，页数据为空");
+            }
+
+            dataBuffer.unwrap().position(0);
+            dataBuffer.unwrap().putInt(leftNum);
+            dataBuffer.unwrap().putLong(minTime);
+            dataBuffer.unwrap().putInt(rightNum);
+            dataBuffer.unwrap().putLong(maxTime);
+
+            if (extNum == -1) {
+                // 用extNum判断才是正确，因为当前页可能因为更新而大变小
+                dataBuffer.unwrap().putInt(-1);
+                flushNormal();
+            } else {
+                dataBuffer.unwrap().putInt(extPageList.get(0).num);
+                flushLarge();
+            }
+
+            super.flush();
+
+            // 释放内存
+            rowMap.clear();
+            extPageList = null;
+
+            stat = PageStat.FLUSHED;
         }
-
-        recoverAll();
-
-        if (rowMap.isEmpty()) {
-            throw new IllegalStateException("刷盘异常，页数据为空");
-        }
-
-        dataBuffer.unwrap().position(0);
-        dataBuffer.unwrap().putInt(leftNum);
-        dataBuffer.unwrap().putLong(minTime);
-        dataBuffer.unwrap().putInt(rightNum);
-        dataBuffer.unwrap().putLong(maxTime);
-
-        if (extNum == -1) {
-            // 用extNum判断才是正确，因为当前页可能因为更新而大变小
-            dataBuffer.unwrap().putInt(-1);
-            flushNormal();
-        } else {
-            dataBuffer.unwrap().putInt(extPageList.get(0).num);
-            flushLarge();
-        }
-
-        super.flush();
-
-        // 释放内存
-        rowMap.clear();
-        extPageList = null;
-
-        stat = PageStat.FLUSHED;
     }
 
     private void firstInsert(long k, Row v) {

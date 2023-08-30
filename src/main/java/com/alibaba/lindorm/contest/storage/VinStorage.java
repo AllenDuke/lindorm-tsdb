@@ -15,11 +15,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class VinStorage {
 
     /**
-     * 内存的10%用来做内存页
+     * 内存20%用来做内存页
      */
-    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.01));
+    private static BufferPool COMMON_POOL = new BufferPool((long) (Runtime.getRuntime().totalMemory() * 0.2));
 
-    private static final LRULinkedHashMap<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>((COMMON_POOL.size() / AbPage.PAGE_SIZE) - 1);
+    // fixme 多线程并发申请
+    private static final LRULinkedHashMap<AbPage, AbPage> PAGE_LRU = new LRULinkedHashMap<>((COMMON_POOL.size() / AbPage.PAGE_SIZE) - 200);
 
     static {
         System.out.println("jvm内存大小：" + Runtime.getRuntime().totalMemory() / 1024 / 1024 + "MB");
@@ -247,6 +248,19 @@ public class VinStorage {
 
     public ArrayList<ColumnValue.ColumnType> columnTypeList() {
         return columnTypeList;
+    }
+
+    public static void flushOldestPage() {
+        if (PAGE_LRU.isEmpty()) {
+            return;
+        }
+        AbPage first = PAGE_LRU.keySet().stream().findFirst().get();
+        PAGE_LRU.remove(first);
+        try {
+            first.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public static void flushAllPage() {

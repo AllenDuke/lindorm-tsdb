@@ -24,7 +24,6 @@ class ExtPage extends AbPage {
 
         nextExtNum = memPage.unwrap().getInt();
         dataSize = memPage.unwrap().getInt();
-        stat = PageStat.RECOVERED_HEAD;
     }
 
 

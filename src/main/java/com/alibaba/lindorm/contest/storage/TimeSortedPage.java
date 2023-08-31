@@ -60,10 +60,6 @@ public class TimeSortedPage extends AbPage {
     }
 
     private synchronized void recoverHead() throws IOException {
-        if (stat == PageStat.RECOVERED_HEAD || stat == PageStat.USING) {
-            return;
-        }
-
         leftNum = memPage.unwrap().getInt();
         minTime = memPage.unwrap().getLong();
         rightNum = memPage.unwrap().getInt();
@@ -73,16 +69,18 @@ public class TimeSortedPage extends AbPage {
             extPageList = new ArrayList<>();
         }
         rowCountOrBigRowSize = memPage.unwrap().getInt();
-
-        stat = PageStat.RECOVERED_HEAD;
     }
 
     private synchronized void recoverAll() throws IOException {
-        if (stat == PageStat.USING) {
+        if (minTime == -1) {
+            // 这是一个新的页
             return;
         }
 
-        recoverHead();
+        if (!rowMap.isEmpty()) {
+            // 这是一个旧的页，但没刷过盘
+            return;
+        }
 
         // 实际上也不会有循环recover
         int nextExtNum = extNum;
@@ -101,8 +99,6 @@ public class TimeSortedPage extends AbPage {
         } else {
             recoverLarge();
         }
-
-        stat = PageStat.USING;
     }
 
     private void recoverLarge() {
@@ -287,8 +283,6 @@ public class TimeSortedPage extends AbPage {
         // 释放内存
         rowMap.clear();
         extPageList = null;
-
-        stat = PageStat.FLUSHED;
     }
 
     private void firstInsert(long k, Row v) {
@@ -353,7 +347,6 @@ public class TimeSortedPage extends AbPage {
     }
 
     protected WindowSearchResult search(WindowSearchRequest request) throws IOException {
-        recoverHead();
         WindowSearchResult result = new WindowSearchResult(this.num);
         if (this.minTime == -1 || this.maxTime == -1) {
             result.setNextLeft(-1);
@@ -405,8 +398,6 @@ public class TimeSortedPage extends AbPage {
      * @return 如果可插入当前节点，那么返回当前页号，否则返回下一个尝试插入的页号
      */
     protected int insert(long k, Row v) throws IOException {
-        recoverHead();
-
         if (minTime != -1 && extNum != -1) {
             // 当前页存放的是大节点，不接受不相等的数据插入
             if (k < minTime) {

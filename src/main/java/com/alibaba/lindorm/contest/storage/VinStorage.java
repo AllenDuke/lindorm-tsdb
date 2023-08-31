@@ -207,7 +207,6 @@ public class VinStorage {
             updateMaxPage((TimeSortedPage) page);
         }
         page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
-        page.stat = PageStat.USING;
         return page;
     }
 
@@ -217,7 +216,7 @@ public class VinStorage {
         }
         P pageKey = newPage(pClass, pageNum);
         AbPage page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
-        if (page.stat != PageStat.KEY) {
+        if (page != pageKey) {
             // 该页还没有换出
             return (P) page;
         }

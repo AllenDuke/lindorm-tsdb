@@ -33,12 +33,9 @@ public abstract class AbPage {
      */
     protected MemPage memPage;
 
-    protected PageStat stat;
-
     public AbPage(VinStorage vinStorage, Integer num) {
         this.vinStorage = vinStorage;
         this.num = num;
-        this.stat = PageStat.KEY;
     }
 
     public synchronized void map(MemPage memPage) {
@@ -54,7 +51,6 @@ public abstract class AbPage {
 
         memPage.unwrap().flip();
         memPage.unwrap().limit(memPage.unwrap().capacity());
-        stat = PageStat.RECOVERED;
     }
 
     /**
@@ -66,8 +62,6 @@ public abstract class AbPage {
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().write(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();
-
-        stat = PageStat.FLUSHED;
     }
 
     @Override

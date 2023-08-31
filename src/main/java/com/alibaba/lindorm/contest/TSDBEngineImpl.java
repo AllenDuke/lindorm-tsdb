@@ -83,7 +83,7 @@ public class TSDBEngineImpl extends TSDBEngine {
     }
 
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
         if (!connected) {
             return;
         }

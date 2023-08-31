@@ -15,7 +15,7 @@ public class PageScheduler {
      */
     private static final MemPagePool MEM_PAGE_POOL = new MemPagePool((int) ((Runtime.getRuntime().totalMemory() * 0.1) / AbPage.PAGE_SIZE));
 
-    public static final PageScheduler PAGE_SCHEDULER = new PageScheduler(MEM_PAGE_POOL.capacity() - 200);
+    public static final PageScheduler PAGE_SCHEDULER = new PageScheduler(MEM_PAGE_POOL.capacity());
 
     static {
         System.out.println("jvm内存大小：" + Runtime.getRuntime().totalMemory() / 1024 / 1024 + "MB");

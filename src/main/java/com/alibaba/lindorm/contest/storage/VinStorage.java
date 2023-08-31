@@ -224,7 +224,7 @@ public class VinStorage {
         // 该页已经在内存中释放，从文件中恢复
         try {
             page.recover();
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             throw new IllegalStateException(pageNum + "号页恢复异常");
         }
@@ -266,8 +266,9 @@ public class VinStorage {
     public synchronized void evict(AbPage page) {
         try {
             page.flush();
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            throw new IllegalStateException("页刷盘异常");
         }
     }
 }

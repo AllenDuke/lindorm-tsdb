@@ -437,11 +437,22 @@ public class TimeSortedPage extends AbPage {
             firstInsert(k, v);
         }
 
-        // 插入map
-        Row oldV = rowMap.put(k, v);
-
         // 准备调整指针
         int position = memPage.unwrap().position();
+        // 准备追加行数据
+        int newRowSize = rowSize(v);
+        position += newRowSize;
+
+        // 面向特殊编程
+        if (k > maxTime && position > memPage.unwrap().limit() && rightNum != -1) {
+            TimeSortedPage nextTry = vinStorage.getPage(TimeSortedPage.class, rightNum);
+            if (k >= nextTry.minTime) {
+                return rightNum;
+            }
+        }
+
+        // 插入map
+        Row oldV = rowMap.put(k, v);
 
         if (oldV != null) {
             // 发生更新
@@ -453,10 +464,6 @@ public class TimeSortedPage extends AbPage {
                 firstInsert(k, v);
             }
         }
-
-        // 准备追加行数据
-        int newRowSize = rowSize(v);
-        position += newRowSize;
 
         /**
          * 检查容量

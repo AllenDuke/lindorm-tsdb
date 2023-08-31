@@ -51,11 +51,9 @@ public abstract class AbPage {
         lock.release();
 
         // todo 最后一个buffer可能不是满的
-//        if (memPage.unwrap().position() != memPage.unwrap().capacity()) {
-//            throw new IllegalStateException("不是一个完整的buffer");
-//        }
 
         memPage.unwrap().flip();
+        memPage.unwrap().limit(memPage.unwrap().capacity());
         stat = PageStat.RECOVERED;
     }
 
@@ -64,6 +62,7 @@ public abstract class AbPage {
      */
     public void flush() throws IOException {
         memPage.unwrap().position(0);
+        memPage.unwrap().limit(memPage.unwrap().capacity());
         FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().write(memPage.unwrap(), PAGE_SIZE * num);
         lock.release();

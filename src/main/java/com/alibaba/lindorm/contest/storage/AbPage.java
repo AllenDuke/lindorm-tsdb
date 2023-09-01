@@ -43,9 +43,9 @@ public abstract class AbPage {
     }
 
     public void recover() throws IOException {
-        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
+//        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().read(memPage.unwrap(), PAGE_SIZE * num);
-        lock.release();
+//        lock.release();
 
         // todo 最后一个buffer可能不是满的
 
@@ -59,9 +59,9 @@ public abstract class AbPage {
     public void flush() throws IOException {
         memPage.unwrap().position(0);
         memPage.unwrap().limit(memPage.unwrap().capacity());
-        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
+//        FileLock lock = vinStorage.dbChannel().lock(PAGE_SIZE * num, PAGE_SIZE, false);
         vinStorage.dbChannel().write(memPage.unwrap(), PAGE_SIZE * num);
-        lock.release();
+//        lock.release();
     }
 
     @Override

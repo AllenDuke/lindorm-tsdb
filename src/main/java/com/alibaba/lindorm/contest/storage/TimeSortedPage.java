@@ -407,7 +407,7 @@ public class TimeSortedPage extends AbPage {
                 return insertResult;
             } else if (k > maxTime) {
                 insertResult.setInserted(false);
-                insertResult.setNextLeft(rightNum);
+                insertResult.setNextRight(rightNum);
                 return insertResult;
             }
         }
@@ -445,7 +445,7 @@ public class TimeSortedPage extends AbPage {
         if (k > maxTime && position > memPage.unwrap().limit()) {
             // 当前row需要插入页的最右端，但剩余不足
             insertResult.setInserted(false);
-            insertResult.setNextLeft(rightNum);
+            insertResult.setNextRight(rightNum);
             return insertResult;
         }
 

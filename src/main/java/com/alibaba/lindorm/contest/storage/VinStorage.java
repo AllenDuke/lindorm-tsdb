@@ -191,20 +191,66 @@ public class VinStorage {
         pageStack.push(cur);
         scheduleLock.unlock();
 
-        int nextTry = -1;
-        while ((nextTry = cur.insert(row.getTimestamp(), row)) != cur.num) {
-            if (nextTry != -1) {
-                cur = getPage(TimeSortedPage.class, nextTry);
-                continue;
+        int lastTry = -1;
+        while (!pageStack.isEmpty()) {
+            cur = pageStack.peek();
+            InsertResult result = cur.insert(row.getTimestamp(), row);
+
+            scheduleLock.lock();
+            pageStack.pop();
+            Thread waiter = pageWaiterMap.remove(cur);
+
+            if (!result.isInserted()) {
+                // 插入当前节点失败
+
+                int nextLeft = result.getNextLeft();
+                int nextRight = result.getNextRight();
+                if (nextLeft == -1 && nextRight == -1) {
+                    // 当前没有合适的节点，新建节点
+                    TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
+                    if (row.getTimestamp() > cur.getMaxTime()) {
+                        // nextPage为cur的右节点
+                        cur.connectRightBeforeFlushingByForce(nextPage);
+                        pageStack.push(nextPage);
+                    } else if (row.getTimestamp() < cur.getMinTime()) {
+                        // nextPage为cur的左节点
+                        nextPage.connectRightBeforeFlushingByForce(cur);
+                        pageStack.push(nextPage);
+                    } else {
+                        throw new IllegalStateException("新建节点异常，curPageMinTime:" + cur.getMinTime() + ",curPageMaxTime:" + cur.getMaxTime() + ",k:" + row.getTimestamp());
+                    }
+                } else if (nextLeft != -1) {
+                    if (nextLeft == lastTry) {
+                        // 节点分裂
+                        TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
+                        // nextPage为cur的左节点
+                        nextPage.connectRightBeforeFlushingByForce(cur);
+                        pageStack.push(nextPage);
+                    } else {
+                        pageStack.push(getPage(TimeSortedPage.class, nextLeft));
+                    }
+                } else {
+                    if (nextRight == lastTry) {
+                        // 节点分裂
+                        TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
+                        // nextPage为cur的右节点
+                        cur.connectRightBeforeFlushingByForce(nextPage);
+                        pageStack.push(nextPage);
+                    } else {
+                        pageStack.push(getPage(TimeSortedPage.class, nextRight));
+                    }
+                }
             }
 
-            // 在当前的左边申请新的一页插入
-            TimeSortedPage left = creatPage(TimeSortedPage.class);
-            // insert前调整链表，因为insert可能会导致flush
-            left.connectRightBeforeFlushingByForce(cur);
-            left.insert(row.getTimestamp(), row);
-            break;
+            scheduleLock.unlock();
+            if (waiter != null) {
+                // 有等待者，唤醒
+                LockSupport.unpark(waiter);
+            }
+
+            lastTry = cur.num;
         }
+
         vinLock.unlock();
         return true;
     }
@@ -254,16 +300,7 @@ public class VinStorage {
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
-        do {
-            /**
-             * 当调度成功，映射到内存页后，才尝试对自身进行锁定。锁定成功后才往下操作。
-             *
-             * 不首先锁定自身，是因为schedule evict也是同步区域，防止a在等待schedule，而b在等待a页evict而造成死锁。
-             *
-             * while循环是为了防止映射到内存页后有立马被调度需要过期。
-             */
-            page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
-        } while (scheduleLock.tryLock());
+        page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
         return page;
     }
 
@@ -272,10 +309,7 @@ public class VinStorage {
             return null;
         }
         P pageKey = newPage(pClass, pageNum);
-        AbPage page;
-        do {
-            page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
-        } while (scheduleLock.tryLock());
+        AbPage page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
         if (page != pageKey) {
             // 该页还没有换出
             return (P) page;

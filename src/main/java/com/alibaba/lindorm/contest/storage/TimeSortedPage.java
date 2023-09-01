@@ -1,6 +1,5 @@
 package com.alibaba.lindorm.contest.storage;
 
-import com.alibaba.lindorm.contest.mem.MemPagePool;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 
@@ -398,20 +397,27 @@ public class TimeSortedPage extends AbPage {
      * @param v
      * @return 如果可插入当前节点，那么返回当前页号，否则返回下一个尝试插入的页号
      */
-    protected int insert(long k, Row v) throws IOException {
+    protected InsertResult insert(long k, Row v) throws IOException {
+        InsertResult insertResult = new InsertResult();
         if (minTime != -1 && extNum != -1) {
             // 当前页存放的是大节点，不接受不相等的数据插入
             if (k < minTime) {
-                return leftNum;
+                insertResult.setInserted(false);
+                insertResult.setNextLeft(leftNum);
+                return insertResult;
             } else if (k > maxTime) {
-                return rightNum;
+                insertResult.setInserted(false);
+                insertResult.setNextLeft(rightNum);
+                return insertResult;
             }
         }
 
         // 这里不用rowMap是否empty来判断页是否为空，因为recoverHead不会去构建rowMap
         if (minTime != -1 && extNum == -1 && k < minTime) {
             // 不能插入当前节点
-            return leftNum;
+            insertResult.setInserted(false);
+            insertResult.setNextLeft(leftNum);
+            return insertResult;
         }
 
         /**
@@ -436,11 +442,11 @@ public class TimeSortedPage extends AbPage {
         position += newRowSize;
 
         // 面向特殊编程
-        if (k > maxTime && position > memPage.unwrap().limit() && rightNum != -1) {
-            TimeSortedPage nextTry = vinStorage.getPage(TimeSortedPage.class, rightNum);
-            if (k >= nextTry.minTime) {
-                return rightNum;
-            }
+        if (k > maxTime && position > memPage.unwrap().limit()) {
+            // 当前row需要插入页的最右端，但剩余不足
+            insertResult.setInserted(false);
+            insertResult.setNextLeft(rightNum);
+            return insertResult;
         }
 
         // 插入map
@@ -476,42 +482,23 @@ public class TimeSortedPage extends AbPage {
             insertLarge(k, v, newRowSize);
             updateTimeWindowBeforeFlushing();
 //            checkAndFlush();
-            return num;
+            insertResult.setInserted(true);
+            return insertResult;
         }
 
         // 当前的rowMap已经调整完毕，在可能发生页connect前updateTimeWindow
         updateTimeWindowBeforeFlushing();
         memPage.unwrap().position(position);
 
-        if (transfer != null && !transfer.isEmpty()) {
-            boolean needCreatNewPage = false;
-            List<Row> transferToNewPage = new LinkedList<>();
-            if (this.rightNum == -1) {
-                // 转移到新的一页
-                needCreatNewPage = true;
-                transferToNewPage.addAll(transfer);
-            } else {
-                // 转移到后一页
-                TimeSortedPage rightPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
-                for (Row row : transfer) {
-                    // transfer是按时间倒序的
-                    if (!needCreatNewPage && rightPage.insert(row.getTimestamp(), row) == this.num) {
-                        transferToNewPage.add(row);
-                        needCreatNewPage = true;
-                        continue;
-                    }
-                    transferToNewPage.add(row);
-                }
-            }
-            if (needCreatNewPage) {
-                TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
-                this.connectRightBeforeFlushingByForce(newPage);
-                for (Row row : transferToNewPage) {
-                    newPage.insert(row.getTimestamp(), row);
-                }
+        if (transfer != null) {
+            // 数据转移到其他页
+            for (Row row : transfer) {
+                vinStorage.insert(row);
             }
         }
-        return num;
+
+        insertResult.setInserted(true);
+        return insertResult;
     }
 
     private void checkConnect(TimeSortedPage page) {
@@ -567,5 +554,13 @@ public class TimeSortedPage extends AbPage {
         }
 
         return size;
+    }
+
+    public long getMinTime() {
+        return minTime;
+    }
+
+    public long getMaxTime() {
+        return maxTime;
     }
 }

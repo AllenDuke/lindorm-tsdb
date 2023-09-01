@@ -59,10 +59,14 @@ public class VinStorage {
     private final Lock scheduleLock = new ReentrantLock();
 
     /**
+     * 记录当前使用的页栈，处于页栈中的页禁止调度换出。
      * 最大栈深为2
      */
     private final Stack<TimeSortedPage> pageStack = new Stack<>();
 
+    /**
+     * 记录当前使用的页中，等待其过期的线程
+     */
     private final Map<TimeSortedPage, Thread> pageWaiterMap = new ConcurrentHashMap<>();
 
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
@@ -111,6 +115,9 @@ public class VinStorage {
 
         TimeSortedPage cur;
 
+        /**
+         * 停止对当前vin的页换出调度，更新当前vin的页栈
+         */
         scheduleLock.lock();
         pageStack.push(getPage(TimeSortedPage.class, maxTimeSortedPage));
         scheduleLock.unlock();
@@ -138,6 +145,7 @@ public class VinStorage {
 
             scheduleLock.unlock();
             if (waiter != null) {
+                // 有等待者，唤醒
                 LockSupport.unpark(waiter);
             }
         }
@@ -324,6 +332,12 @@ public class VinStorage {
                 if (usingPage == page) {
                     permit = false;
 
+                    /**
+                     * 当前页正在使用中，等待其使用完毕后唤醒。
+                     * 理论上使用完毕后，必定会唤醒，而后获取到其内存页，因为该已不在调度范围内。
+                     *
+                     * 但为了防止意外情况，这里还是在循环中判断
+                     */
                     pageWaiterMap.put(usingPage, Thread.currentThread());
                     scheduleLock.unlock();
                     LockSupport.park();

@@ -71,17 +71,8 @@ public class TimeSortedPage extends AbPage {
         rowCountOrBigRowSize = memPage.unwrap().getInt();
     }
 
+
     private synchronized void recoverAll() throws IOException {
-        if (minTime == -1) {
-            // 这是一个新的页
-            return;
-        }
-
-        if (!rowMap.isEmpty()) {
-            // 这是一个旧的页，但没刷过盘
-            return;
-        }
-
         // 实际上也不会有循环recover
         int nextExtNum = extNum;
         while (nextExtNum >= 0) {
@@ -257,6 +248,11 @@ public class TimeSortedPage extends AbPage {
 
     @Override
     public void flush() throws IOException {
+        if (rowMap.isEmpty()) {
+            // 无脏数据，不需要刷盘
+            return;
+        }
+
         recoverAll();
 
         if (rowMap.isEmpty()) {
@@ -371,7 +367,11 @@ public class TimeSortedPage extends AbPage {
         }
 
         // 当前页存在数据
-        recoverAll();
+
+        if (rowMap.isEmpty()) {
+            // 未恢复rowMap，进行恢复
+            recoverAll();
+        }
 
         // 左闭右开区间
         SortedMap<Long, Row> map = rowMap.tailMap(leftTime).headMap(rightTime);
@@ -422,7 +422,10 @@ public class TimeSortedPage extends AbPage {
 
         // 准备插入当前节点
 
-        recoverAll();
+        if (minTime != -1 && rowMap.isEmpty()) {
+            // 不是新生页，且未恢复rowMap，那么进行恢复
+            recoverAll();
+        }
 
         if (rowMap.isEmpty()) {
             firstInsert(k, v);
@@ -490,17 +493,20 @@ public class TimeSortedPage extends AbPage {
                 transferToNewPage.addAll(transfer);
             } else {
                 // 转移到后一页
+                vinStorage.getLock().unlock();
                 TimeSortedPage rightPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
                 for (Row row : transfer) {
                     // transfer是按时间倒序的
                     if (!needCreatNewPage && rightPage.insert(row.getTimestamp(), row) == this.num) {
                         transferToNewPage.add(row);
                         needCreatNewPage = true;
+                        continue;
                     }
                     transferToNewPage.add(row);
                 }
             }
             if (needCreatNewPage) {
+                vinStorage.getLock().unlock();
                 TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
                 this.connectRightBeforeFlushingByForce(newPage);
                 for (Row row : transferToNewPage) {

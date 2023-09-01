@@ -14,6 +14,8 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class VinStorage {
 
@@ -46,6 +48,8 @@ public class VinStorage {
 
     private boolean connected = false;
 
+    private final Lock lock = new ReentrantLock();
+
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
         this.path = path;
@@ -53,7 +57,8 @@ public class VinStorage {
         this.columnTypeList = columnTypeList;
     }
 
-    private synchronized void init() throws IOException {
+    private void init() throws IOException {
+        lock.lock();
         if (connected) {
             return;
         }
@@ -77,9 +82,10 @@ public class VinStorage {
         }
 
         connected = true;
+        lock.unlock();
     }
 
-    public synchronized ArrayList<Row> window(long minTime, long maxTime) throws IOException {
+    public ArrayList<Row> window(long minTime, long maxTime) throws IOException {
         init();
 
         if (maxTimeSortedPage == -1) {
@@ -108,11 +114,11 @@ public class VinStorage {
                 traceStack.push(getPage(TimeSortedPage.class, nextRight));
             }
         }
-
+        lock.unlock();
         return rows;
     }
 
-    public synchronized Row latest() throws IOException {
+    public Row latest() throws IOException {
         init();
         ArrayList<Row> window = window(latestRowKey, latestRowKey + 1);
         if (window.isEmpty()) {
@@ -121,7 +127,7 @@ public class VinStorage {
         return window.get(0);
     }
 
-    public synchronized boolean insert(Row row) throws IOException {
+    public boolean insert(Row row) throws IOException {
         Vin vin = row.getVin();
         if (!this.vin.equals(vin)) {
             return false;
@@ -158,6 +164,7 @@ public class VinStorage {
             left.insert(row.getTimestamp(), row);
             break;
         }
+        lock.unlock();
         return true;
     }
 
@@ -189,7 +196,7 @@ public class VinStorage {
         return page;
     }
 
-    private synchronized void updateMaxPage(TimeSortedPage page) {
+    private void updateMaxPage(TimeSortedPage page) {
         this.maxTimeSortedPage = page.pageNum();
     }
 
@@ -206,7 +213,16 @@ public class VinStorage {
         if (page instanceof TimeSortedPage) {
             updateMaxPage((TimeSortedPage) page);
         }
-        page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
+        do {
+            /**
+             * 当调度成功，映射到内存页后，才尝试对自身进行锁定。锁定成功后才往下操作。
+             *
+             * 不首先锁定自身，是因为schedule evict也是同步区域，防止a在等待schedule，而b在等待a页evict而造成死锁。
+             *
+             * while循环是为了防止映射到内存页后有立马被调度需要过期。
+             */
+            page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
+        } while (lock.tryLock());
         return page;
     }
 
@@ -215,7 +231,11 @@ public class VinStorage {
             return null;
         }
         P pageKey = newPage(pClass, pageNum);
-        AbPage page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
+        AbPage page;
+        lock.unlock();
+        do {
+            page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
+        } while (lock.tryLock());
         if (page != pageKey) {
             // 该页还没有换出
             return (P) page;
@@ -238,7 +258,8 @@ public class VinStorage {
         return columnTypeList;
     }
 
-    public synchronized void shutdown() throws IOException {
+    public void shutdown() throws IOException {
+        lock.lock();
         if (!connected) {
             return;
         }
@@ -251,6 +272,7 @@ public class VinStorage {
         outputStream.close();
         dbChannel.close();
         connected = false;
+        lock.unlock();
     }
 
     public Vin vin() {
@@ -262,12 +284,18 @@ public class VinStorage {
      *
      * @param page
      */
-    public synchronized void evict(AbPage page) {
+    public void evict(AbPage page) {
+        lock.lock();
         try {
             page.flush();
         } catch (Exception e) {
             e.printStackTrace();
             throw new IllegalStateException("页刷盘异常");
         }
+        lock.unlock();
+    }
+
+    protected Lock getLock() {
+        return lock;
     }
 }

@@ -86,7 +86,7 @@ public class TestMyDbMt {
                     rowList.add(new Row(new Vin(str1.getBytes(StandardCharsets.UTF_8)), finalI, columns));
                     try {
                         tsdbEngineSample.upsert(new WriteRequest("test", rowList));
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });
@@ -101,7 +101,7 @@ public class TestMyDbMt {
                     try {
                         ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
                         showResult(resultSet);
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });

@@ -191,64 +191,74 @@ public class VinStorage {
         pageStack.push(cur);
         scheduleLock.unlock();
 
-        int lastTry = -1;
-        while (!pageStack.isEmpty()) {
-            cur = pageStack.peek();
-            InsertResult result = cur.insert(row.getTimestamp(), row);
+        Queue<Row> rowQueue = new LinkedList<>();
+        rowQueue.add(row);
 
-            scheduleLock.lock();
-            pageStack.pop();
-            Thread waiter = pageWaiterMap.remove(cur);
+        while (!rowQueue.isEmpty()) {
+            Row pollRow = rowQueue.poll();
+            int lastTry = -1;
+            while (!pageStack.isEmpty()) {
+                cur = pageStack.peek();
+                InsertResult result = cur.insert(pollRow.getTimestamp(), pollRow);
 
-            if (!result.isInserted()) {
-                // 插入当前节点失败
+                scheduleLock.lock();
+                pageStack.pop();
+                Thread waiter = pageWaiterMap.remove(cur);
 
-                int nextLeft = result.getNextLeft();
-                int nextRight = result.getNextRight();
-                if (nextLeft == -1 && nextRight == -1) {
-                    // 当前没有合适的节点，新建节点
-                    TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
-                    if (row.getTimestamp() > cur.getMaxTime()) {
-                        // nextPage为cur的右节点
-                        cur.connectRightBeforeFlushingByForce(nextPage);
-                        pageStack.push(nextPage);
-                    } else if (row.getTimestamp() < cur.getMinTime()) {
-                        // nextPage为cur的左节点
-                        nextPage.connectRightBeforeFlushingByForce(cur);
-                        pageStack.push(nextPage);
-                    } else {
-                        throw new IllegalStateException("新建节点异常，curPageMinTime:" + cur.getMinTime() + ",curPageMaxTime:" + cur.getMaxTime() + ",k:" + row.getTimestamp());
-                    }
-                } else if (nextLeft != -1) {
-                    if (nextLeft == lastTry) {
-                        // 节点分裂
-                        TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
-                        // nextPage为cur的左节点
-                        nextPage.connectRightBeforeFlushingByForce(cur);
-                        pageStack.push(nextPage);
-                    } else {
-                        pageStack.push(getPage(TimeSortedPage.class, nextLeft));
+                if (result.isInserted()) {
+                    if (result.getTransfer() != null) {
+                        rowQueue.addAll(result.getTransfer());
                     }
                 } else {
-                    if (nextRight == lastTry) {
-                        // 节点分裂
+                    // 插入当前节点失败
+
+                    int nextLeft = result.getNextLeft();
+                    int nextRight = result.getNextRight();
+                    if (nextLeft == -1 && nextRight == -1) {
+                        // 当前没有合适的节点，新建节点
                         TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
-                        // nextPage为cur的右节点
-                        cur.connectRightBeforeFlushingByForce(nextPage);
-                        pageStack.push(nextPage);
+                        if (pollRow.getTimestamp() > cur.getMaxTime()) {
+                            // nextPage为cur的右节点
+                            cur.connectRightBeforeFlushingByForce(nextPage);
+                            pageStack.push(nextPage);
+                        } else if (pollRow.getTimestamp() < cur.getMinTime()) {
+                            // nextPage为cur的左节点
+                            nextPage.connectRightBeforeFlushingByForce(cur);
+                            pageStack.push(nextPage);
+                        } else {
+                            throw new IllegalStateException("新建节点异常，curPageMinTime:" + cur.getMinTime() + ",curPageMaxTime:" + cur.getMaxTime() + ",k:" + pollRow.getTimestamp());
+                        }
+                    } else if (nextLeft != -1) {
+                        if (nextLeft == lastTry) {
+                            // 节点分裂
+                            TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
+                            // nextPage为cur的左节点
+                            nextPage.connectRightBeforeFlushingByForce(cur);
+                            pageStack.push(nextPage);
+                        } else {
+                            pageStack.push(getPage(TimeSortedPage.class, nextLeft));
+                        }
                     } else {
-                        pageStack.push(getPage(TimeSortedPage.class, nextRight));
+                        if (nextRight == lastTry) {
+                            // 节点分裂
+                            TimeSortedPage nextPage = creatPage(TimeSortedPage.class);
+                            // nextPage为cur的右节点
+                            cur.connectRightBeforeFlushingByForce(nextPage);
+                            pageStack.push(nextPage);
+                        } else {
+                            pageStack.push(getPage(TimeSortedPage.class, nextRight));
+                        }
                     }
                 }
-            }
 
-            scheduleLock.unlock();
-            if (waiter != null) {
-                // 有等待者，唤醒
-                LockSupport.unpark(waiter);
-            }
+                scheduleLock.unlock();
+                if (waiter != null) {
+                    // 有等待者，唤醒
+                    LockSupport.unpark(waiter);
+                }
 
-            lastTry = cur.num;
+                lastTry = cur.num;
+            }
         }
 
         vinLock.unlock();

@@ -492,9 +492,7 @@ public class TimeSortedPage extends AbPage {
 
         if (transfer != null) {
             // 数据转移到其他页
-            for (Row row : transfer) {
-                vinStorage.insert(row);
-            }
+            insertResult.setTransfer(transfer);
         }
 
         insertResult.setInserted(true);

@@ -16,6 +16,8 @@ public class InsertResult {
      */
     private int nextRight = -1;
 
+    private List<Row> transfer;
+
     private boolean inserted = false;
 
     public int getNextLeft() {
@@ -40,5 +42,13 @@ public class InsertResult {
 
     public void setInserted(boolean inserted) {
         this.inserted = inserted;
+    }
+
+    public List<Row> getTransfer() {
+        return transfer;
+    }
+
+    public void setTransfer(List<Row> transfer) {
+        this.transfer = transfer;
     }
 }

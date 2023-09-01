@@ -48,7 +48,7 @@ public class PageScheduler {
                 lru.put(unMapPage, unMapPage);
                 return unMapPage;
             }
-            // 移除最老元素，调整映射关系
+            // 移除最老元素，防止多个线程争抢同一页，调整映射关系
             oldest = lru.removeOldest();
             // lru调整完毕，释放当前锁，防止死锁
             if (!startLru) {

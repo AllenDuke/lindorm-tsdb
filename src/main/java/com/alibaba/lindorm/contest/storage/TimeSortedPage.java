@@ -10,6 +10,8 @@ import java.util.*;
 
 public class TimeSortedPage extends AbPage {
 
+    private static final int HEAD_SIZE = 4 + 8 + 4 + 8 + 4 + 4;
+
     public TimeSortedPage(VinStorage vinStorage, Integer num) {
         super(vinStorage, num);
         leftNum = -1;
@@ -73,6 +75,10 @@ public class TimeSortedPage extends AbPage {
 
 
     private synchronized void recoverAll() throws IOException {
+        if (memPage.unwrap().position() != HEAD_SIZE || !rowMap.isEmpty()) {
+            return;
+        }
+
         // 实际上也不会有循环recover
         int nextExtNum = extNum;
         while (nextExtNum >= 0) {
@@ -289,7 +295,7 @@ public class TimeSortedPage extends AbPage {
 
         extNum = -1;
 //        rowCountOrBigRowSize = rowSize(v);
-        memPage.unwrap().position(4 + 8 + 4 + 8 + 4 + 4);
+        memPage.unwrap().position(HEAD_SIZE);
     }
 
     /**
@@ -367,15 +373,10 @@ public class TimeSortedPage extends AbPage {
         }
 
         // 当前页存在数据
-
-        if (rowMap.isEmpty()) {
-            // 未恢复rowMap，进行恢复
-            recoverAll();
-        }
+        recoverAll();
 
         // 左闭右开区间
         SortedMap<Long, Row> map = rowMap.tailMap(leftTime).headMap(rightTime);
-        map.remove(rightTime);
         Collection<Row> rows = map.values();
         result.setRowList(new LinkedList<>(rows));
 
@@ -383,7 +384,7 @@ public class TimeSortedPage extends AbPage {
             // 需要继续往左寻找
             result.setNextLeft(this.leftNum);
         }
-        if (rightTime > maxTime) {
+        if (rightTime > maxTime + 1) {
             // 需要继续往右寻找
             result.setNextRight(this.rightNum);
         }
@@ -422,10 +423,7 @@ public class TimeSortedPage extends AbPage {
 
         // 准备插入当前节点
 
-        if (minTime != -1 && rowMap.isEmpty()) {
-            // 不是新生页，且未恢复rowMap，那么进行恢复
-            recoverAll();
-        }
+        recoverAll();
 
         if (rowMap.isEmpty()) {
             firstInsert(k, v);
@@ -483,6 +481,7 @@ public class TimeSortedPage extends AbPage {
 
         // 当前的rowMap已经调整完毕，在可能发生页connect前updateTimeWindow
         updateTimeWindowBeforeFlushing();
+        memPage.unwrap().position(position);
 
         if (transfer != null && !transfer.isEmpty()) {
             boolean needCreatNewPage = false;
@@ -493,7 +492,6 @@ public class TimeSortedPage extends AbPage {
                 transferToNewPage.addAll(transfer);
             } else {
                 // 转移到后一页
-                vinStorage.getLock().unlock();
                 TimeSortedPage rightPage = vinStorage.getPage(TimeSortedPage.class, this.rightNum);
                 for (Row row : transfer) {
                     // transfer是按时间倒序的
@@ -506,7 +504,6 @@ public class TimeSortedPage extends AbPage {
                 }
             }
             if (needCreatNewPage) {
-                vinStorage.getLock().unlock();
                 TimeSortedPage newPage = vinStorage.creatPage(TimeSortedPage.class);
                 this.connectRightBeforeFlushingByForce(newPage);
                 for (Row row : transferToNewPage) {
@@ -514,8 +511,6 @@ public class TimeSortedPage extends AbPage {
                 }
             }
         }
-
-        memPage.unwrap().position(position);
         return num;
     }
 

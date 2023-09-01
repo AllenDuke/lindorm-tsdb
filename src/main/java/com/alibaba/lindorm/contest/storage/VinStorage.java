@@ -1,8 +1,6 @@
 package com.alibaba.lindorm.contest.storage;
 
 import com.alibaba.lindorm.contest.CommonUtils;
-import com.alibaba.lindorm.contest.mem.MemPage;
-import com.alibaba.lindorm.contest.mem.MemPagePool;
 import com.alibaba.lindorm.contest.schedule.PageScheduler;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
@@ -13,8 +11,10 @@ import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class VinStorage {
@@ -48,7 +48,22 @@ public class VinStorage {
 
     private boolean connected = false;
 
-    private final Lock lock = new ReentrantLock();
+    /**
+     * 单个vin文件串行读写
+     */
+    private final Lock vinLock = new ReentrantLock();
+
+    /**
+     * 用于对该vin映射的内存页进行调度
+     */
+    private final Lock scheduleLock = new ReentrantLock();
+
+    /**
+     * 最大栈深为2
+     */
+    private final Stack<TimeSortedPage> pageStack = new Stack<>();
+
+    private final Map<TimeSortedPage, Thread> pageWaiterMap = new ConcurrentHashMap<>();
 
     public VinStorage(Vin vin, String path, ArrayList<String> columnNameList, ArrayList<ColumnValue.ColumnType> columnTypeList) {
         this.vin = vin;
@@ -58,7 +73,6 @@ public class VinStorage {
     }
 
     private void init() throws IOException {
-        lock.lock();
         if (connected) {
             return;
         }
@@ -82,10 +96,10 @@ public class VinStorage {
         }
 
         connected = true;
-        lock.unlock();
     }
 
     public ArrayList<Row> window(long minTime, long maxTime) throws IOException {
+        vinLock.lock();
         init();
 
         if (maxTimeSortedPage == -1) {
@@ -96,25 +110,38 @@ public class VinStorage {
         ArrayList<Row> rows = new ArrayList<>();
 
         TimeSortedPage cur;
-        Stack<TimeSortedPage> traceStack = new Stack<>();
-        traceStack.push(getPage(TimeSortedPage.class, maxTimeSortedPage));
-        while (!traceStack.isEmpty()) {
-            cur = traceStack.pop();
+
+        scheduleLock.lock();
+        pageStack.push(getPage(TimeSortedPage.class, maxTimeSortedPage));
+        scheduleLock.unlock();
+
+        while (!pageStack.isEmpty()) {
+            cur = pageStack.peek();
             WindowSearchResult result = cur.search(request);
             List<Row> rowList = result.getRowList();
-            if (rowList != null) {
+            if (rowList != null && !rowList.isEmpty()) {
                 rows.addAll(rowList);
             }
+
+            scheduleLock.lock();
+            pageStack.pop();
+            Thread waiter = pageWaiterMap.remove(cur);
+
             int nextLeft = result.getNextLeft();
             if (nextLeft != -1) {
-                traceStack.push(getPage(TimeSortedPage.class, nextLeft));
+                pageStack.push(getPage(TimeSortedPage.class, nextLeft));
             }
             int nextRight = result.getNextRight();
             if (nextRight != -1) {
-                traceStack.push(getPage(TimeSortedPage.class, nextRight));
+                pageStack.push(getPage(TimeSortedPage.class, nextRight));
+            }
+
+            scheduleLock.unlock();
+            if (waiter != null) {
+                LockSupport.unpark(waiter);
             }
         }
-        lock.unlock();
+        vinLock.unlock();
         return rows;
     }
 
@@ -128,6 +155,8 @@ public class VinStorage {
     }
 
     public boolean insert(Row row) throws IOException {
+        vinLock.lock();
+
         Vin vin = row.getVin();
         if (!this.vin.equals(vin)) {
             return false;
@@ -143,12 +172,16 @@ public class VinStorage {
          * 从最大节点开始寻找 插入
          */
         TimeSortedPage cur;
+
+        scheduleLock.lock();
         if (maxTimeSortedPage == -1) {
             cur = creatPage(TimeSortedPage.class);
             maxTimeSortedPage = cur.num;
         } else {
             cur = getPage(TimeSortedPage.class, maxTimeSortedPage);
         }
+        pageStack.push(cur);
+        scheduleLock.unlock();
 
         int nextTry = -1;
         while ((nextTry = cur.insert(row.getTimestamp(), row)) != cur.num) {
@@ -164,7 +197,7 @@ public class VinStorage {
             left.insert(row.getTimestamp(), row);
             break;
         }
-        lock.unlock();
+        vinLock.unlock();
         return true;
     }
 
@@ -222,7 +255,7 @@ public class VinStorage {
              * while循环是为了防止映射到内存页后有立马被调度需要过期。
              */
             page = (P) PageScheduler.PAGE_SCHEDULER.schedule(page);
-        } while (lock.tryLock());
+        } while (scheduleLock.tryLock());
         return page;
     }
 
@@ -232,10 +265,9 @@ public class VinStorage {
         }
         P pageKey = newPage(pClass, pageNum);
         AbPage page;
-        lock.unlock();
         do {
             page = PageScheduler.PAGE_SCHEDULER.schedule(pageKey);
-        } while (lock.tryLock());
+        } while (scheduleLock.tryLock());
         if (page != pageKey) {
             // 该页还没有换出
             return (P) page;
@@ -259,7 +291,7 @@ public class VinStorage {
     }
 
     public void shutdown() throws IOException {
-        lock.lock();
+        vinLock.lock();
         if (!connected) {
             return;
         }
@@ -272,7 +304,7 @@ public class VinStorage {
         outputStream.close();
         dbChannel.close();
         connected = false;
-        lock.unlock();
+        vinLock.unlock();
     }
 
     public Vin vin() {
@@ -285,17 +317,30 @@ public class VinStorage {
      * @param page
      */
     public void evict(AbPage page) {
-        lock.lock();
-        try {
-            page.flush();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new IllegalStateException("页刷盘异常");
-        }
-        lock.unlock();
-    }
+        boolean permit = true;
+        while (true) {
+            scheduleLock.lock();
+            for (TimeSortedPage usingPage : pageStack) {
+                if (usingPage == page) {
+                    permit = false;
 
-    protected Lock getLock() {
-        return lock;
+                    pageWaiterMap.put(usingPage, Thread.currentThread());
+                    scheduleLock.unlock();
+                    LockSupport.park();
+                    break;
+                }
+            }
+            if (!permit) {
+                continue;
+            }
+            try {
+                page.flush();
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new IllegalStateException("页刷盘异常");
+            }
+            break;
+        }
+        scheduleLock.unlock();
     }
 }

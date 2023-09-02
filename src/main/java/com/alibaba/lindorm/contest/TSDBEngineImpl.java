@@ -146,24 +146,25 @@ public class TSDBEngineImpl extends TSDBEngine {
     private void consume() {
         int cnt = 4;
         for (int i = 0; i < cnt; i++) {
+            int finalI = i;
             Thread thread = new Thread(() -> {
                 try {
                     while (true) {
                         for (Map.Entry<Vin, Queue<Request>> entry : VIN_Q.entrySet()) {
                             Vin vin = entry.getKey();
-                            if ((vin.hashCode() % cnt) != 0) {
+                            if ((vin.hashCode() % cnt) != finalI) {
                                 // 一个vin智能被一个线程处理
                                 continue;
                             }
 
-                            Queue<Request> rowQueue = entry.getValue();
-                            if (rowQueue.isEmpty()) {
+                            Queue<Request> requestQ = entry.getValue();
+                            if (requestQ.isEmpty()) {
                                 continue;
                             }
 
-                            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-                            lock.lock();
-                            Request request = rowQueue.poll();
+//                            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+//                            lock.lock();
+                            Request request = requestQ.poll();
                             if (request.row != null) {
                                 int rowSize = rowSize(request.row);
                                 BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
@@ -206,7 +207,7 @@ public class TSDBEngineImpl extends TSDBEngine {
 
                                 request.timeRowList.put(new ArrayList<>(ans));
                             }
-                            lock.unlock();
+//                            lock.unlock();
                         }
                     }
                 } catch (Throwable throwable) {

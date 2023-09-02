@@ -58,10 +58,10 @@ public class TestMyDbMt {
             tsdbEngineSample.connect();
 
             Map<String, ColumnValue> columns = new HashMap<>();
-            ByteBuffer buffer = ByteBuffer.allocate(3);
-            buffer.put((byte) 70);
-            buffer.put((byte) 71);
-            buffer.put((byte) 72);
+            ByteBuffer buffer = ByteBuffer.allocate(100);
+            for (int i = 0; i < 100; i++) {
+                buffer.put((byte) i);
+            }
             buffer.flip();
             columns.put("col1", new ColumnValue.IntegerColumn(123));
             columns.put("col2", new ColumnValue.DoubleFloatColumn(1.23));
@@ -76,8 +76,8 @@ public class TestMyDbMt {
 
             tsdbEngineSample.createTable("test", schema);
 
-            ThreadPoolExecutor wExecutor = new ThreadPoolExecutor(3, 3, 1, TimeUnit.MINUTES, new LinkedBlockingDeque<>());
-            int rowCnt = 100000;
+            ThreadPoolExecutor wExecutor = new ThreadPoolExecutor(8, 8, 1, TimeUnit.MINUTES, new LinkedBlockingDeque<>());
+            int rowCnt = 300000;
             for (int i = 0; i < rowCnt; i++) {
                 int finalI = i;
                 wExecutor.submit(() -> {
@@ -92,20 +92,20 @@ public class TestMyDbMt {
                 });
             }
             ThreadPoolExecutor rExecutor = new ThreadPoolExecutor(3, 3, 1, TimeUnit.MINUTES, new LinkedBlockingDeque<>());
-            for (int i = 0; i < rowCnt; i++) {
-                rExecutor.submit(() -> {
-                    try {
-                        ArrayList<Vin> vinList = new ArrayList<>();
-                        vinList.add(new Vin(str.getBytes(StandardCharsets.UTF_8)));
-                        vinList.add(new Vin(str1.getBytes(StandardCharsets.UTF_8)));
-                        Set<String> requestedColumns = new HashSet<>(Arrays.asList("col1", "col2", "col3"));
-                        ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
-                        showResult(resultSet);
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
+//            for (int i = 0; i < rowCnt; i++) {
+//                rExecutor.submit(() -> {
+//                    try {
+//                        ArrayList<Vin> vinList = new ArrayList<>();
+//                        vinList.add(new Vin(str.getBytes(StandardCharsets.UTF_8)));
+//                        vinList.add(new Vin(str1.getBytes(StandardCharsets.UTF_8)));
+//                        Set<String> requestedColumns = new HashSet<>(Arrays.asList("col1", "col2", "col3"));
+//                        ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
+//                        showResult(resultSet);
+//                    } catch (Throwable e) {
+//                        e.printStackTrace();
+//                    }
+//                });
+//            }
             wExecutor.shutdown();
             wExecutor.awaitTermination(3, TimeUnit.MINUTES);
             System.out.println("wDone");
@@ -152,9 +152,8 @@ public class TestMyDbMt {
             showResult(resultSet);
 
             tsdbEngineSample.shutdown();
-        } catch (
-                IOException | InterruptedException e) {
-            System.out.println(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
     }

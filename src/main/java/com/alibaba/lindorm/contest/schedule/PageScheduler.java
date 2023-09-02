@@ -7,6 +7,8 @@ import com.alibaba.lindorm.contest.storage.PageStat;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class PageScheduler {
 
@@ -28,6 +30,8 @@ public class PageScheduler {
 
     private boolean startLru = false;
 
+    private final Lock lock = new ReentrantLock(true);
+
     public PageScheduler(int capacity) {
         this.capacity = capacity;
         this.lru = new Lru<>(capacity);
@@ -36,26 +40,28 @@ public class PageScheduler {
     public AbPage schedule(AbPage unMapPage) {
         Map.Entry<AbPage, AbPage> oldest;
         MemPage memPage;
-        synchronized (this) {
-            AbPage mapAbPage = lru.get(unMapPage);
-            if (mapAbPage != null) {
-                return mapAbPage;
-            }
-
-            if (lru.size() < capacity) {
-                memPage = MEM_PAGE_POOL.allocate();
-                unMapPage.map(memPage);
-                lru.put(unMapPage, unMapPage);
-                return unMapPage;
-            }
-            // 移除最老元素，防止多个线程争抢同一页，调整映射关系
-            oldest = lru.removeOldest();
-            // lru调整完毕，释放当前锁，防止死锁
-            if (!startLru) {
-                System.out.println("开始lru调度");
-                startLru = true;
-            }
+        lock.lock();
+        AbPage mapAbPage = lru.get(unMapPage);
+        if (mapAbPage != null) {
+            lock.unlock();
+            return mapAbPage;
         }
+
+        if (lru.size() < capacity) {
+            memPage = MEM_PAGE_POOL.allocate();
+            unMapPage.map(memPage);
+            lru.put(unMapPage, unMapPage);
+            lock.unlock();
+            return unMapPage;
+        }
+        // 移除最老元素，防止多个线程争抢同一页，调整映射关系
+        oldest = lru.removeOldest();
+        // lru调整完毕，释放当前锁，防止死锁
+        if (!startLru) {
+            System.out.println("开始lru调度");
+            startLru = true;
+        }
+        lock.unlock();
 
         AbPage page = oldest.getValue();
         // 通知过期、及时刷盘
@@ -65,19 +71,21 @@ public class PageScheduler {
         unMapPage.map(memPage);
 
         // 调整完毕，加入调度
-        synchronized (this) {
-            lru.put(unMapPage, unMapPage);
-        }
+        lock.lock();
+        lru.put(unMapPage, unMapPage);
+        lock.unlock();
         return unMapPage;
     }
 
-    public synchronized void shutdown() {
+    public void shutdown() {
+        lock.lock();
         System.out.println("shutdown所有页刷盘");
         for (AbPage page : lru.values()) {
             page.vinStorage().evict(page);
         }
         lru.clear();
         System.out.println("shutdown所有页刷盘完成");
+        lock.unlock();
     }
 
     public int capacity() {

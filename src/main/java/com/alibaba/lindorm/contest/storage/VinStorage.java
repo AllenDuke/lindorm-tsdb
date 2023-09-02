@@ -56,7 +56,7 @@ public class VinStorage {
     /**
      * 用于对该vin映射的内存页进行调度
      */
-    private final Lock scheduleLock = new ReentrantLock();
+    private final Lock scheduleLock = new ReentrantLock(true);
 
     /**
      * 记录当前使用的页栈，处于页栈中的页禁止调度换出。
@@ -107,6 +107,7 @@ public class VinStorage {
         init();
 
         if (maxTimeSortedPage == -1) {
+            vinLock.unlock();
             return new ArrayList<>(0);
         }
 
@@ -154,11 +155,14 @@ public class VinStorage {
     }
 
     public Row latest() throws IOException {
+        vinLock.lock();
         init();
         ArrayList<Row> window = window(latestRowKey, latestRowKey + 1);
         if (window.isEmpty()) {
+            vinLock.unlock();
             return null;
         }
+        vinLock.unlock();
         return window.get(0);
     }
 
@@ -167,6 +171,7 @@ public class VinStorage {
 
         Vin vin = row.getVin();
         if (!this.vin.equals(vin)) {
+            vinLock.unlock();
             return false;
         }
 

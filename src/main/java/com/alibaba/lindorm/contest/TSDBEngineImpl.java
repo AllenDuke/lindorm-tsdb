@@ -27,6 +27,8 @@ public class TSDBEngineImpl extends TSDBEngine {
 
         volatile ArrayBlockingQueue<Row> latestRow;
         volatile ArrayBlockingQueue<ArrayList<Row>> timeRowList;
+
+        volatile ArrayBlockingQueue<Integer> shutdownResponse;
     }
 
     private static final int NUM_FOLDERS = 300;
@@ -37,7 +39,7 @@ public class TSDBEngineImpl extends TSDBEngine {
 
     private static final BlockingQueue<Request> SCHEDULE_Q = new ArrayBlockingQueue<>(1);
 
-    private static final long CACHE_SIZE = (long) (Runtime.getRuntime().totalMemory() * 0.2);
+    private static final long CACHE_SIZE = (long) (Runtime.getRuntime().totalMemory() * 0.1);
     private static final AtomicLongFieldUpdater<TSDBEngineImpl> FREE_SIZE_UPDATER = AtomicLongFieldUpdater.newUpdater(TSDBEngineImpl.class, "freeSize");
 
     private boolean connected = false;
@@ -91,6 +93,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                 }
             }
         }
+        FREE_SIZE_UPDATER.set(this, CACHE_SIZE);
         connected = true;
     }
 
@@ -114,15 +117,20 @@ public class TSDBEngineImpl extends TSDBEngine {
             return;
         }
 
-        // Close all resources, assuming all writing and reading process has finished.
-        for (BufferedOutputStream fout : OUT_FILES.values()) {
+        for (Vin vin : VIN_Q.keySet()) {
+            Request request = new Request();
+            request.vin = vin;
+            request.shutdownResponse = new ArrayBlockingQueue<>(1);
+            Queue<Request> requestQueue = VIN_Q.get(request.vin);
+            requestQueue.add(request);
             try {
-                fout.close();
-            } catch (IOException e) {
-                System.err.println("Error closing outFiles");
-                throw new RuntimeException(e);
+                request.shutdownResponse.take();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
+
+        VIN_Q.clear();
         OUT_FILES.clear();
         VIN_LOCKS.clear();
 
@@ -152,7 +160,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                     while (true) {
                         for (Map.Entry<Vin, Queue<Request>> entry : VIN_Q.entrySet()) {
                             Vin vin = entry.getKey();
-                            if ((vin.hashCode() % cnt) != finalI) {
+                            if (Math.abs(vin.hashCode() % cnt) != finalI) {
                                 // 一个vin智能被一个线程处理
                                 continue;
                             }
@@ -171,6 +179,9 @@ public class TSDBEngineImpl extends TSDBEngine {
                                 appendRowToFile(fileOutForVin, request.row);
                                 FREE_SIZE_UPDATER.addAndGet(this, rowSize);
                             } else if (request.latestQueryRequest != null) {
+//                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
+//                                fileOutForVin.flush();
+
                                 FileInputStream fin = getFileInForVin(vin);
                                 Row latestRow = null;
                                 while (fin.available() > 0) {
@@ -185,7 +196,10 @@ public class TSDBEngineImpl extends TSDBEngine {
                                 } else {
                                     request.latestRow.put(NULL_ROW);
                                 }
-                            } else {
+                            } else if (request.timeRangeQueryRequest != null) {
+//                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
+//                                fileOutForVin.flush();
+
                                 TimeRangeQueryRequest trReadReq = request.timeRangeQueryRequest;
 
                                 Set<Row> ans = new HashSet<>();
@@ -206,6 +220,12 @@ public class TSDBEngineImpl extends TSDBEngine {
                                 fin.close();
 
                                 request.timeRowList.put(new ArrayList<>(ans));
+                            } else {
+                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
+                                fileOutForVin.flush();
+                                fileOutForVin.close();
+
+                                request.shutdownResponse.put(1);
                             }
 //                            lock.unlock();
                         }
@@ -243,7 +263,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         });
         scheduler.setName("scheduler");
         scheduler.setDaemon(true);
-        scheduler.start();
+//        scheduler.start();
     }
 
     @Override
@@ -252,11 +272,15 @@ public class TSDBEngineImpl extends TSDBEngine {
             Request request = new Request();
             request.row = row;
             request.vin = row.getVin();
-            try {
-                SCHEDULE_Q.put(request);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+
+            int rowSize = rowSize(request.row);
+            // 忙等入队
+            while (FREE_SIZE_UPDATER.addAndGet(this, -rowSize) < 0) {
+                FREE_SIZE_UPDATER.addAndGet(this, rowSize);
             }
+
+            Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
+            requestQueue.add(request);
         }
     }
 
@@ -270,8 +294,10 @@ public class TSDBEngineImpl extends TSDBEngine {
             request.latestRow = new ArrayBlockingQueue<>(1);
 
             Row latestRow = null;
+            Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
+            requestQueue.add(request);
+
             try {
-                SCHEDULE_Q.put(request);
                 latestRow = request.latestRow.take();
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -299,8 +325,9 @@ public class TSDBEngineImpl extends TSDBEngine {
         request.timeRangeQueryRequest = trReadReq;
         request.timeRowList = new ArrayBlockingQueue<>(1);
 
+        Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
+        requestQueue.add(request);
         try {
-            SCHEDULE_Q.put(request);
             rows = request.timeRowList.take();
         } catch (InterruptedException e) {
             e.printStackTrace();

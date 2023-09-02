@@ -92,6 +92,7 @@ public class TestMyDb {
                     rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), i * 10 + j, columns));
                 }
                 tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+                System.out.println("inserted");
             }
 
 //            rowList.clear();

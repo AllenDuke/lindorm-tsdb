@@ -10,18 +10,32 @@ package com.alibaba.lindorm.contest;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
+import java.lang.ref.Cleaner;
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
+    private static class LatestRowInfo {
+        volatile long timestamp;
+        volatile long pos;
+        volatile long size;
+    }
+
     private static final int NUM_FOLDERS = 300;
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Vin, OutputStream> OUT_FILES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, OutputStream> DATA_FILES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, FileChannel> INDEX_FILES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, Long> DATA_FILE_POSS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, LatestRowInfo> LATEST_ROW_INFOS = new ConcurrentHashMap<>();
+
 
     private boolean connected = false;
     private int columnsNum;
@@ -90,7 +104,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         }
 
         // Close all resources, assuming all writing and reading process has finished.
-        for (OutputStream fout : OUT_FILES.values()) {
+        for (OutputStream fout : DATA_FILES.values()) {
             try {
                 fout.flush();
                 fout.close();
@@ -99,8 +113,26 @@ public class TSDBEngineImpl extends TSDBEngine {
                 throw new RuntimeException(e);
             }
         }
-        OUT_FILES.clear();
+        DATA_FILES.clear();
         VIN_LOCKS.clear();
+
+        for (Map.Entry<Vin, LatestRowInfo> entry : LATEST_ROW_INFOS.entrySet()) {
+            Vin vin = entry.getKey();
+            LatestRowInfo latestRowInfo = entry.getValue();
+            FileChannel fileChannel = getIndexFileChannelForVin(vin);
+            try {
+                MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, 24);
+                buffer.putLong(latestRowInfo.timestamp);
+                buffer.putLong(latestRowInfo.pos);
+                buffer.putLong(latestRowInfo.size);
+                buffer.flip();
+                buffer.force();
+                fileChannel.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        INDEX_FILES.clear();
 
         // Persist the schema.
         try {
@@ -119,6 +151,35 @@ public class TSDBEngineImpl extends TSDBEngine {
         connected = false;
     }
 
+    private int rowSize(Row row) {
+        // todo 暂不计算vin
+        int size = 0;
+
+        // 时间戳
+        size += 8;
+
+        for (String columnName : columnsName) {
+            ColumnValue columnValue = row.getColumns().get(columnName);
+            switch (columnValue.getColumnType()) {
+                case COLUMN_TYPE_STRING:
+                    size += 4;
+                    size += columnValue.getStringValue().remaining();
+                    break;
+                case COLUMN_TYPE_INTEGER:
+                    size += 4;
+                    break;
+                case COLUMN_TYPE_DOUBLE_FLOAT:
+                    size += 8;
+                    break;
+                default:
+                    throw new IllegalStateException("Invalid column type");
+            }
+        }
+
+        return size;
+    }
+
+
     @Override
     public void upsert(WriteRequest wReq) throws IOException {
         for (Row row : wReq.getRows()) {
@@ -126,12 +187,52 @@ public class TSDBEngineImpl extends TSDBEngine {
             Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
             lock.lock();
             try {
+                Long filePos = DATA_FILE_POSS.computeIfAbsent(vin, k -> 0L);
                 OutputStream fileOutForVin = getFileOutForVin(vin);
                 appendRowToFile(fileOutForVin, row);
+
+                LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.computeIfAbsent(vin, k -> new LatestRowInfo());
+                if (row.getTimestamp() >= latestRowInfo.timestamp) {
+                    latestRowInfo.timestamp = row.getTimestamp();
+                    latestRowInfo.pos = filePos;
+                    latestRowInfo.size = rowSize(row);
+                }
+
+                DATA_FILE_POSS.put(vin, filePos + rowSize(row));
             } finally {
                 lock.unlock();
             }
         }
+    }
+
+    private Row readFormBuffer(Vin vin, ByteBuffer buffer) {
+        long timestamp = buffer.getLong();
+        Map<String, ColumnValue> columns = new HashMap<>();
+        for (int j = 0; j < columnsType.size(); j++) {
+            ColumnValue.ColumnType columnType = columnsType.get(j);
+            String columnName = columnsName.get(j);
+            ColumnValue cVal;
+            switch (columnType) {
+                case COLUMN_TYPE_INTEGER:
+                    int intVal = buffer.getInt();
+                    cVal = new ColumnValue.IntegerColumn(intVal);
+                    break;
+                case COLUMN_TYPE_DOUBLE_FLOAT:
+                    double doubleVal = buffer.getDouble();
+                    cVal = new ColumnValue.DoubleFloatColumn(doubleVal);
+                    break;
+                case COLUMN_TYPE_STRING:
+                    int strLen = buffer.getInt();
+                    byte[] strBytes = new byte[strLen];
+                    buffer.get(strBytes);
+                    cVal = new ColumnValue.StringColumn(ByteBuffer.wrap(strBytes));
+                    break;
+                default:
+                    throw new IllegalStateException("Undefined column type, this is not expected");
+            }
+            columns.put(columnName, cVal);
+        }
+        return new Row(vin, timestamp, columns);
     }
 
     @Override
@@ -144,31 +245,36 @@ public class TSDBEngineImpl extends TSDBEngine {
             OutputStream fileOutForVin = getFileOutForVin(vin);
             fileOutForVin.flush();
 
-            int rowNums;
+            FileChannel channel = getIndexFileChannelForVin(vin);
+            if (channel.size() == 0) {
+                lock.unlock();
+                continue;
+            }
+            MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, 24);
+            long latestTimestamp = buffer.getLong();
+            long latestPos = buffer.getLong();
+            long latestSize = buffer.getLong();
+            // help gc
+            buffer = null;
+
             Row latestRow;
             try {
                 FileInputStream fin = getFileInForVin(vin);
-                latestRow = null;
-                rowNums = 0;
-                while (fin.available() > 0) {
-                    Row curRow = readRowFromStream(vin, fin);
-                    if (rowNums == 0 || curRow.getTimestamp() >= latestRow.getTimestamp()) {
-                        latestRow = curRow;
-                    }
-                    ++rowNums;
-                }
+                FileChannel fileChannel = fin.getChannel();
+                buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
+                latestRow = readFormBuffer(vin, buffer);
+                buffer = null;
                 fin.close();
             } finally {
                 lock.unlock();
             }
 
-            if (rowNums != 0) {
-                Map<String, ColumnValue> filteredColumns = new HashMap<>();
-                Map<String, ColumnValue> columns = latestRow.getColumns();
-                for (String key : pReadReq.getRequestedColumns())
-                    filteredColumns.put(key, columns.get(key));
-                ans.add(new Row(vin, latestRow.getTimestamp(), filteredColumns));
-            }
+            Map<String, ColumnValue> filteredColumns = new HashMap<>();
+            Map<String, ColumnValue> columns = latestRow.getColumns();
+            for (String key : pReadReq.getRequestedColumns())
+                filteredColumns.put(key, columns.get(key));
+            ans.add(new Row(vin, latestRow.getTimestamp(), filteredColumns));
+
         }
         return ans;
     }
@@ -296,7 +402,7 @@ public class TSDBEngineImpl extends TSDBEngine {
 
     private OutputStream getFileOutForVin(Vin vin) {
         // Try getting from already opened set.
-        OutputStream fileOut = OUT_FILES.get(vin);
+        OutputStream fileOut = DATA_FILES.get(vin);
         if (fileOut != null) {
             return fileOut;
         }
@@ -305,7 +411,26 @@ public class TSDBEngineImpl extends TSDBEngine {
         File vinFilePath = getVinFilePath(vin);
         try {
             fileOut = new BufferedOutputStream(new FileOutputStream(vinFilePath, true));
-            OUT_FILES.put(vin, fileOut);
+            DATA_FILES.put(vin, fileOut);
+            return fileOut;
+        } catch (IOException e) {
+            System.err.println("Cannot open write stream for vin file: [" + vinFilePath + "]");
+            throw new RuntimeException(e);
+        }
+    }
+
+    private FileChannel getIndexFileChannelForVin(Vin vin) {
+        // Try getting from already opened set.
+        FileChannel fileOut = INDEX_FILES.get(vin);
+        if (fileOut != null) {
+            return fileOut;
+        }
+
+        // The first time we open the file out stream for this vin, open a new stream and put it into opened set.
+        File vinFilePath = getVinIndexFilePath(vin);
+        try {
+            fileOut = new RandomAccessFile(vinFilePath, "rw").getChannel();
+            INDEX_FILES.put(vin, fileOut);
             return fileOut;
         } catch (IOException e) {
             System.err.println("Cannot open write stream for vin file: [" + vinFilePath + "]");
@@ -330,6 +455,24 @@ public class TSDBEngineImpl extends TSDBEngine {
         File folder = new File(dataPath, String.valueOf(folderIndex));
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         File vinFile = new File(folder.getAbsolutePath(), vinStr);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        if (!vinFile.exists()) {
+            try {
+                vinFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return vinFile;
+    }
+
+    private File getVinIndexFilePath(Vin vin) {
+        int folderIndex = vin.hashCode() % NUM_FOLDERS;
+        File folder = new File(dataPath, String.valueOf(folderIndex));
+        String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
+        File vinFile = new File(folder.getAbsolutePath(), vinStr + ".idx");
         if (!folder.exists()) {
             folder.mkdirs();
         }

@@ -149,6 +149,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         columnsName.clear();
         columnsType.clear();
         connected = false;
+        System.out.println("shutdown done");
     }
 
     private int rowSize(Row row) {
@@ -254,13 +255,15 @@ public class TSDBEngineImpl extends TSDBEngine {
                 latestTimestamp = latestRowInfo.timestamp;
                 latestPos = latestRowInfo.pos;
                 latestSize = latestRowInfo.size;
-            }else{
+            } else {
                 FileChannel channel = getIndexFileChannelForVin(vin);
                 if (channel.size() == 0) {
                     lock.unlock();
                     continue;
                 }
-                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, 24);
+                ByteBuffer buffer = ByteBuffer.allocate(24);
+                channel.read(buffer);
+                buffer.flip();
                 latestTimestamp = buffer.getLong();
                 latestPos = buffer.getLong();
                 latestSize = buffer.getLong();
@@ -272,7 +275,9 @@ public class TSDBEngineImpl extends TSDBEngine {
             try {
                 FileInputStream fin = getFileInForVin(vin);
                 FileChannel fileChannel = fin.getChannel();
-                MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
+                ByteBuffer buffer = ByteBuffer.allocate((int) latestSize);
+                fileChannel.read(buffer, latestPos);
+                buffer.flip();
                 latestRow = readFormBuffer(vin, buffer);
                 buffer = null;
                 fin.close();

@@ -139,7 +139,7 @@ public class TestMyDbMt {
             tsdbEngineSample.connect();
 
             ThreadPoolExecutor rExecutor = new ThreadPoolExecutor(3, 3, 1, TimeUnit.MINUTES, new LinkedBlockingDeque<>());
-            for (int i = 0; i < rowCnt; i++) {
+            for (int i = 0; i < 100; i++) {
                 rExecutor.submit(() -> {
                     try {
                         ArrayList<Vin> vinList = new ArrayList<>();

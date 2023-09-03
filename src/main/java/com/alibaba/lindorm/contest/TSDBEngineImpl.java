@@ -410,7 +410,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         // The first time we open the file out stream for this vin, open a new stream and put it into opened set.
         File vinFilePath = getVinFilePath(vin);
         try {
-            fileOut = new BufferedOutputStream(new FileOutputStream(vinFilePath, true));
+            fileOut = new BufferedOutputStream(new FileOutputStream(vinFilePath, true), 16 * 1024);
             DATA_FILES.put(vin, fileOut);
             return fileOut;
         } catch (IOException e) {

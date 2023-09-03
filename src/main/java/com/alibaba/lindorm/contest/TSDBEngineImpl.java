@@ -19,39 +19,14 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
-    private static class Request {
-        volatile Vin vin;
-        volatile Row row;
-        volatile LatestQueryRequest latestQueryRequest;
-        volatile TimeRangeQueryRequest timeRangeQueryRequest;
-
-        volatile ArrayBlockingQueue<Row> latestRow;
-        volatile ArrayBlockingQueue<ArrayList<Row>> timeRowList;
-
-        volatile ArrayBlockingQueue<Integer> shutdownResponse;
-    }
-
     private static final int NUM_FOLDERS = 300;
-    private static final ConcurrentMap<Vin, BufferedOutputStream> OUT_FILES = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Vin, Queue<Request>> VIN_Q = new ConcurrentHashMap<>();
-    private static final Row NULL_ROW = new Row(null, -1, null);
-
-    private static final BlockingQueue<Request> SCHEDULE_Q = new ArrayBlockingQueue<>(1);
-
-    private static final long CACHE_SIZE = (long) (Runtime.getRuntime().totalMemory() * 0.1);
-    private static final AtomicLongFieldUpdater<TSDBEngineImpl> FREE_SIZE_UPDATER = AtomicLongFieldUpdater.newUpdater(TSDBEngineImpl.class, "freeSize");
+    private static final ConcurrentMap<Vin, OutputStream> OUT_FILES = new ConcurrentHashMap<>();
 
     private boolean connected = false;
     private int columnsNum;
     private ArrayList<String> columnsName;
     private ArrayList<ColumnValue.ColumnType> columnsType;
-
-    private volatile long freeSize = CACHE_SIZE;
-
-    private final List<Thread> writer = new ArrayList<>();
-
-    private Thread scheduler;
 
     /**
      * This constructor's function signature should not be modified.
@@ -60,8 +35,6 @@ public class TSDBEngineImpl extends TSDBEngine {
      */
     public TSDBEngineImpl(File dataPath) {
         super(dataPath);
-        schedule();
-        consume();
     }
 
     @Override
@@ -93,7 +66,6 @@ public class TSDBEngineImpl extends TSDBEngine {
                 }
             }
         }
-        FREE_SIZE_UPDATER.set(this, CACHE_SIZE);
         connected = true;
     }
 
@@ -117,20 +89,16 @@ public class TSDBEngineImpl extends TSDBEngine {
             return;
         }
 
-        for (Vin vin : VIN_Q.keySet()) {
-            Request request = new Request();
-            request.vin = vin;
-            request.shutdownResponse = new ArrayBlockingQueue<>(1);
-            Queue<Request> requestQueue = VIN_Q.get(request.vin);
-            requestQueue.add(request);
+        // Close all resources, assuming all writing and reading process has finished.
+        for (OutputStream fout : OUT_FILES.values()) {
             try {
-                request.shutdownResponse.take();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                fout.flush();
+                fout.close();
+            } catch (IOException e) {
+                System.err.println("Error closing outFiles");
+                throw new RuntimeException(e);
             }
         }
-
-        VIN_Q.clear();
         OUT_FILES.clear();
         VIN_LOCKS.clear();
 
@@ -151,136 +119,18 @@ public class TSDBEngineImpl extends TSDBEngine {
         connected = false;
     }
 
-    private void consume() {
-        int cnt = 4;
-        for (int i = 0; i < cnt; i++) {
-            int finalI = i;
-            Thread thread = new Thread(() -> {
-                try {
-                    while (true) {
-                        for (Map.Entry<Vin, Queue<Request>> entry : VIN_Q.entrySet()) {
-                            Vin vin = entry.getKey();
-                            if (Math.abs(vin.hashCode() % cnt) != finalI) {
-                                // 一个vin智能被一个线程处理
-                                continue;
-                            }
-
-                            Queue<Request> requestQ = entry.getValue();
-                            if (requestQ.isEmpty()) {
-                                continue;
-                            }
-
-//                            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-//                            lock.lock();
-                            Request request = requestQ.poll();
-                            if (request.row != null) {
-                                int rowSize = rowSize(request.row);
-                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
-                                appendRowToFile(fileOutForVin, request.row);
-                                FREE_SIZE_UPDATER.addAndGet(this, rowSize);
-                            } else if (request.latestQueryRequest != null) {
-//                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
-//                                fileOutForVin.flush();
-
-                                FileInputStream fin = getFileInForVin(vin);
-                                Row latestRow = null;
-                                while (fin.available() > 0) {
-                                    Row curRow = readRowFromStream(vin, fin);
-                                    if (latestRow == null || curRow.getTimestamp() >= latestRow.getTimestamp()) {
-                                        latestRow = curRow;
-                                    }
-                                }
-                                fin.close();
-                                if (latestRow != null) {
-                                    request.latestRow.put(latestRow);
-                                } else {
-                                    request.latestRow.put(NULL_ROW);
-                                }
-                            } else if (request.timeRangeQueryRequest != null) {
-//                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
-//                                fileOutForVin.flush();
-
-                                TimeRangeQueryRequest trReadReq = request.timeRangeQueryRequest;
-
-                                Set<Row> ans = new HashSet<>();
-
-                                FileInputStream fin = getFileInForVin(vin);
-                                while (fin.available() > 0) {
-                                    Row row = readRowFromStream(vin, fin);
-                                    long timestamp = row.getTimestamp();
-                                    if (timestamp >= trReadReq.getTimeLowerBound() && timestamp < trReadReq.getTimeUpperBound()) {
-                                        Map<String, ColumnValue> filteredColumns = new HashMap<>();
-                                        Map<String, ColumnValue> columns = row.getColumns();
-
-                                        for (String key : trReadReq.getRequestedColumns())
-                                            filteredColumns.put(key, columns.get(key));
-                                        ans.add(new Row(vin, timestamp, filteredColumns));
-                                    }
-                                }
-                                fin.close();
-
-                                request.timeRowList.put(new ArrayList<>(ans));
-                            } else {
-                                BufferedOutputStream fileOutForVin = getFileOutForVin(vin);
-                                fileOutForVin.flush();
-                                fileOutForVin.close();
-
-                                request.shutdownResponse.put(1);
-                            }
-//                            lock.unlock();
-                        }
-                    }
-                } catch (Throwable throwable) {
-                    throwable.printStackTrace();
-                }
-            });
-            thread.setName("writer-" + i);
-            thread.setDaemon(true);
-            thread.start();
-            writer.add(thread);
-        }
-    }
-
-    private void schedule() {
-        scheduler = new Thread(() -> {
-            while (true) {
-                try {
-                    Request request = SCHEDULE_Q.take();
-                    if (request.row != null) {
-                        int rowSize = rowSize(request.row);
-                        // 忙等入队
-                        while (FREE_SIZE_UPDATER.addAndGet(this, -rowSize) < 0) {
-                            FREE_SIZE_UPDATER.addAndGet(this, rowSize);
-                        }
-                    }
-
-                    Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
-                    requestQueue.add(request);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        scheduler.setName("scheduler");
-        scheduler.setDaemon(true);
-//        scheduler.start();
-    }
-
     @Override
     public void upsert(WriteRequest wReq) throws IOException {
         for (Row row : wReq.getRows()) {
-            Request request = new Request();
-            request.row = row;
-            request.vin = row.getVin();
-
-            int rowSize = rowSize(request.row);
-            // 忙等入队
-            while (FREE_SIZE_UPDATER.addAndGet(this, -rowSize) < 0) {
-                FREE_SIZE_UPDATER.addAndGet(this, rowSize);
+            Vin vin = row.getVin();
+            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+            lock.lock();
+            try {
+                OutputStream fileOutForVin = getFileOutForVin(vin);
+                appendRowToFile(fileOutForVin, row);
+            } finally {
+                lock.unlock();
             }
-
-            Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
-            requestQueue.add(request);
         }
     }
 
@@ -288,22 +138,31 @@ public class TSDBEngineImpl extends TSDBEngine {
     public ArrayList<Row> executeLatestQuery(LatestQueryRequest pReadReq) throws IOException {
         ArrayList<Row> ans = new ArrayList<>();
         for (Vin vin : pReadReq.getVins()) {
-            Request request = new Request();
-            request.vin = vin;
-            request.latestQueryRequest = pReadReq;
-            request.latestRow = new ArrayBlockingQueue<>(1);
+            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+            lock.lock();
 
-            Row latestRow = null;
-            Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
-            requestQueue.add(request);
+            OutputStream fileOutForVin = getFileOutForVin(vin);
+            fileOutForVin.flush();
 
+            int rowNums;
+            Row latestRow;
             try {
-                latestRow = request.latestRow.take();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                FileInputStream fin = getFileInForVin(vin);
+                latestRow = null;
+                rowNums = 0;
+                while (fin.available() > 0) {
+                    Row curRow = readRowFromStream(vin, fin);
+                    if (rowNums == 0 || curRow.getTimestamp() >= latestRow.getTimestamp()) {
+                        latestRow = curRow;
+                    }
+                    ++rowNums;
+                }
+                fin.close();
+            } finally {
+                lock.unlock();
             }
 
-            if (latestRow != null && latestRow != NULL_ROW) {
+            if (rowNums != 0) {
                 Map<String, ColumnValue> filteredColumns = new HashMap<>();
                 Map<String, ColumnValue> columns = latestRow.getColumns();
                 for (String key : pReadReq.getRequestedColumns())
@@ -316,23 +175,34 @@ public class TSDBEngineImpl extends TSDBEngine {
 
     @Override
     public ArrayList<Row> executeTimeRangeQuery(TimeRangeQueryRequest trReadReq) throws IOException {
+        Set<Row> ans = new HashSet<>();
         Vin vin = trReadReq.getVin();
+        Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+        lock.lock();
 
-        ArrayList<Row> rows = null;
+        OutputStream fileOutForVin = getFileOutForVin(vin);
+        fileOutForVin.flush();
 
-        Request request = new Request();
-        request.vin = vin;
-        request.timeRangeQueryRequest = trReadReq;
-        request.timeRowList = new ArrayBlockingQueue<>(1);
-
-        Queue<Request> requestQueue = VIN_Q.computeIfAbsent(request.vin, k -> new ConcurrentLinkedQueue<>());
-        requestQueue.add(request);
         try {
-            rows = request.timeRowList.take();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            FileInputStream fin = getFileInForVin(trReadReq.getVin());
+            while (fin.available() > 0) {
+                Row row = readRowFromStream(vin, fin);
+                long timestamp = row.getTimestamp();
+                if (timestamp >= trReadReq.getTimeLowerBound() && timestamp < trReadReq.getTimeUpperBound()) {
+                    Map<String, ColumnValue> filteredColumns = new HashMap<>();
+                    Map<String, ColumnValue> columns = row.getColumns();
+
+                    for (String key : trReadReq.getRequestedColumns())
+                        filteredColumns.put(key, columns.get(key));
+                    ans.add(new Row(vin, timestamp, filteredColumns));
+                }
+            }
+            fin.close();
+        } finally {
+            lock.unlock();
         }
-        return rows;
+
+        return new ArrayList<>(ans);
     }
 
     private String schemaToString() {
@@ -347,35 +217,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         return sb.toString();
     }
 
-    private int rowSize(Row row) {
-        // todo 暂不计算vin
-        int size = 0;
-
-        // 时间戳
-        size += 8;
-
-        for (String columnName : columnsName) {
-            ColumnValue columnValue = row.getColumns().get(columnName);
-            switch (columnValue.getColumnType()) {
-                case COLUMN_TYPE_STRING:
-                    size += 4;
-                    size += columnValue.getStringValue().remaining();
-                    break;
-                case COLUMN_TYPE_INTEGER:
-                    size += 4;
-                    break;
-                case COLUMN_TYPE_DOUBLE_FLOAT:
-                    size += 8;
-                    break;
-                default:
-                    throw new IllegalStateException("Invalid column type");
-            }
-        }
-
-        return size;
-    }
-
-    private void appendRowToFile(BufferedOutputStream fout, Row row) {
+    private void appendRowToFile(OutputStream fout, Row row) {
         if (row.getColumns().size() != columnsNum) {
             System.err.println("Cannot write a non-complete row with columns' num: [" + row.getColumns().size() + "]. ");
             System.err.println("There are [" + columnsNum + "] rows in total");
@@ -401,7 +243,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                         throw new IllegalStateException("Invalid column type");
                 }
             }
-            fout.flush();
+//            fout.flush();
         } catch (IOException e) {
             System.err.println("Error writing row to file");
             throw new RuntimeException(e);
@@ -452,9 +294,9 @@ public class TSDBEngineImpl extends TSDBEngine {
         }
     }
 
-    private BufferedOutputStream getFileOutForVin(Vin vin) {
+    private OutputStream getFileOutForVin(Vin vin) {
         // Try getting from already opened set.
-        BufferedOutputStream fileOut = OUT_FILES.get(vin);
+        OutputStream fileOut = OUT_FILES.get(vin);
         if (fileOut != null) {
             return fileOut;
         }

@@ -1,12 +1,11 @@
 package com.alibaba.lindorm.contest;
 
 import jdk.internal.misc.Unsafe;
-import java.io.EOFException;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+
+import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class CommonUtils {
     // Add "--add-opens java.base/jdk.internal.misc=ALL-UNNAMED" to your VM properties to enable unsafe.
@@ -29,8 +28,67 @@ public class CommonUtils {
         writeLong(out, Double.doubleToLongBits(v));
     }
 
+    /***
+     * 压缩GZip
+     *
+     * @param data
+     * @return
+     */
+    public static byte[] gZip(byte[] data) {
+        byte[] b = null;
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            GZIPOutputStream gzip = new GZIPOutputStream(bos);
+            gzip.write(data);
+            gzip.finish();
+            gzip.close();
+            b = bos.toByteArray();
+            bos.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return b;
+    }
+
+    /***
+     * 解压GZip
+     *
+     * @param data
+     * @return
+     */
+    public static byte[] unGZip(byte[] data) {
+        byte[] b = null;
+        try {
+            ByteArrayInputStream bis = new ByteArrayInputStream(data);
+            GZIPInputStream gzip = new GZIPInputStream(bis);
+            byte[] buf = new byte[1024];
+            int num = -1;
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            while ((num = gzip.read(buf, 0, buf.length)) != -1) {
+                baos.write(buf, 0, num);
+            }
+            b = baos.toByteArray();
+            baos.flush();
+            baos.close();
+            gzip.close();
+            bis.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return b;
+    }
+
     public static void writeString(OutputStream out, ByteBuffer v) throws IOException {
-        writeInt(out, v.remaining());
+        int zip = v.remaining();
+        if (v.remaining() > 0) {
+            byte[] gZip = gZip(v.array());
+            if (gZip.length < v.remaining()) {
+                v = ByteBuffer.wrap(gZip);
+                zip = -v.remaining();
+            }
+        }
+
+        writeInt(out, zip);
         if (v.remaining() > 0) {
             byte[] array1 = null;
             if (v.hasArray()) {
@@ -76,12 +134,24 @@ public class CommonUtils {
             res.flip();
             return res;
         }
+
+        boolean zip = false;
+        if (strLen < 0) {
+            zip = true;
+            strLen = -strLen;
+        }
         byte[] b = new byte[strLen];
         int ret = in.readNBytes(b, 0, strLen);
         if (ret != strLen) {
             throw new EOFException();
         }
-        return ByteBuffer.wrap(b);
+
+        if (zip) {
+            return ByteBuffer.wrap(unGZip(b));
+        } else {
+            return ByteBuffer.wrap(b);
+        }
+
     }
 
     public static boolean cleanDir(File dir, boolean deleteDirItself) {

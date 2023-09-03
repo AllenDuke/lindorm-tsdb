@@ -180,6 +180,26 @@ public class TSDBEngineImpl extends TSDBEngine {
         return size;
     }
 
+    private Row deepClone(Row row) {
+        Map<String, ColumnValue> columns = row.getColumns();
+        Map<String, ColumnValue> columnsClone = new HashMap<>(columns.size());
+        columns.forEach((k, v) -> {
+
+            if (v.getColumnType() == ColumnValue.ColumnType.COLUMN_TYPE_STRING) {
+                ByteBuffer stringValue = v.getStringValue();
+
+                ByteBuffer allocate = ByteBuffer.allocate(stringValue.limit());
+                allocate.put(stringValue);
+                allocate.flip();
+
+                // 只有这个是可能会变的 其他都是final的
+                v = new ColumnValue.StringColumn(allocate);
+            }
+            columnsClone.put(k, v);
+        });
+        return new Row(row.getVin(), row.getTimestamp(), columnsClone);
+    }
+
 
     @Override
     public void upsert(WriteRequest wReq) throws IOException {
@@ -224,9 +244,22 @@ public class TSDBEngineImpl extends TSDBEngine {
                     break;
                 case COLUMN_TYPE_STRING:
                     int strLen = buffer.getInt();
+                    boolean zip = false;
+                    if (strLen < 0) {
+                        zip = true;
+                        strLen = -strLen;
+                    }
+
                     byte[] strBytes = new byte[strLen];
                     buffer.get(strBytes);
-                    cVal = new ColumnValue.StringColumn(ByteBuffer.wrap(strBytes));
+                    ByteBuffer wrap;
+                    if (zip) {
+                        wrap = ByteBuffer.wrap(CommonUtils.unGZip(strBytes));
+                    } else {
+                        wrap = ByteBuffer.wrap(strBytes);
+                    }
+
+                    cVal = new ColumnValue.StringColumn(wrap);
                     break;
                 default:
                     throw new IllegalStateException("Undefined column type, this is not expected");

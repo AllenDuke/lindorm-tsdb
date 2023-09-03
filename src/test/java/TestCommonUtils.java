@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Date;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;

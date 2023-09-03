@@ -95,6 +95,11 @@ public class TestMyDb {
                 System.out.println("inserted");
             }
 
+            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(300)));
+            rowList.clear();
+            rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns));
+            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+
 //            rowList.clear();
 //            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE + 1))));
 //            Row bigRow = new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns);

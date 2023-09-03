@@ -55,6 +55,9 @@ public class TestMyDbReadOnly {
             ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
             showResult(resultSet);
 
+            resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
+            showResult(resultSet);
+
             resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 100));
             showResult(resultSet);

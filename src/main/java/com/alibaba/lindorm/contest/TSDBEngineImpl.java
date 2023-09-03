@@ -256,19 +256,25 @@ public class TSDBEngineImpl extends TSDBEngine {
                 latestPos = latestRowInfo.pos;
                 latestSize = latestRowInfo.size;
             } else {
-                FileChannel channel = getIndexFileChannelForVin(vin);
-                if (channel.size() == 0) {
+                FileChannel indexChannel = getIndexFileChannelForVin(vin);
+                if (indexChannel.size() == 0) {
                     lock.unlock();
                     continue;
                 }
                 ByteBuffer buffer = ByteBuffer.allocate(24);
-                channel.read(buffer);
+                indexChannel.read(buffer, 0);
                 buffer.flip();
                 latestTimestamp = buffer.getLong();
                 latestPos = buffer.getLong();
                 latestSize = buffer.getLong();
                 // help gc
                 buffer = null;
+
+                latestRowInfo = new LatestRowInfo();
+                latestRowInfo.timestamp = latestTimestamp;
+                latestRowInfo.pos = latestPos;
+                latestRowInfo.size = latestSize;
+                LATEST_ROW_INFOS.put(vin, latestRowInfo);
             }
 
             Row latestRow;

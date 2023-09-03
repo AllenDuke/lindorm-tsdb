@@ -127,6 +127,12 @@ public class TestMyDbMt {
 //            rowList.add(bigRow);
 //            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
 
+
+            ArrayList<Vin> list = new ArrayList<>();
+            list.add(new Vin(str.getBytes(StandardCharsets.UTF_8)));
+            ArrayList<Row> set = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", list, new HashSet<>(Arrays.asList("col1", "col2", "col3"))));
+            showResult(set);
+
             tsdbEngineSample.shutdown();
 
             // Stage2: read

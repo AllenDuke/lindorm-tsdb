@@ -245,23 +245,34 @@ public class TSDBEngineImpl extends TSDBEngine {
             OutputStream fileOutForVin = getFileOutForVin(vin);
             fileOutForVin.flush();
 
-            FileChannel channel = getIndexFileChannelForVin(vin);
-            if (channel.size() == 0) {
-                lock.unlock();
-                continue;
+            long latestTimestamp;
+            long latestPos;
+            long latestSize;
+            LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.get(vin);
+            if (latestRowInfo != null) {
+                // 还在内存中
+                latestTimestamp = latestRowInfo.timestamp;
+                latestPos = latestRowInfo.pos;
+                latestSize = latestRowInfo.size;
+            }else{
+                FileChannel channel = getIndexFileChannelForVin(vin);
+                if (channel.size() == 0) {
+                    lock.unlock();
+                    continue;
+                }
+                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, 24);
+                latestTimestamp = buffer.getLong();
+                latestPos = buffer.getLong();
+                latestSize = buffer.getLong();
+                // help gc
+                buffer = null;
             }
-            MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, 24);
-            long latestTimestamp = buffer.getLong();
-            long latestPos = buffer.getLong();
-            long latestSize = buffer.getLong();
-            // help gc
-            buffer = null;
 
             Row latestRow;
             try {
                 FileInputStream fin = getFileInForVin(vin);
                 FileChannel fileChannel = fin.getChannel();
-                buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
+                MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
                 latestRow = readFormBuffer(vin, buffer);
                 buffer = null;
                 fin.close();
@@ -410,7 +421,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         // The first time we open the file out stream for this vin, open a new stream and put it into opened set.
         File vinFilePath = getVinFilePath(vin);
         try {
-            fileOut = new BufferedOutputStream(new FileOutputStream(vinFilePath, true), 16 * 1024);
+            fileOut = new BufferedOutputStream(new FileOutputStream(vinFilePath, true));
             DATA_FILES.put(vin, fileOut);
             return fileOut;
         } catch (IOException e) {

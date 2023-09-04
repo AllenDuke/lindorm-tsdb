@@ -314,9 +314,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             try {
                 FileInputStream fin = getFileInForVin(vin);
                 FileChannel fileChannel = fin.getChannel();
-                ByteBuffer buffer = ByteBuffer.allocate((int) latestSize);
-                fileChannel.read(buffer, latestPos);
-                buffer.flip();
+                ByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
                 latestRow = readFormBuffer(vin, buffer);
                 buffer = null;
                 fin.close();

@@ -21,15 +21,15 @@ public class SsTable {
 
     private int itemCnt = 0;
 
-    private final List<String> columnsName;
+    private final TableSchema tableSchema;
 
     private Map<String, ColumnValue> lastColumns;
 
     private Row lastRow;
 
-    public SsTable(OutputStream outputStream, List<String> columnsName) {
+    public SsTable(OutputStream outputStream, TableSchema tableSchema) {
         this.outputStream = outputStream;
-        this.columnsName = columnsName;
+        this.tableSchema = tableSchema;
     }
 
     private void updateLastRow(Row row) {

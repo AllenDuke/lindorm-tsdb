@@ -18,7 +18,7 @@
 # createTable 接口
 + 创建一个表
 + 参数为表名以及 Schema 信息
-+ 初赛中，只会创建一张表
++ 注：复赛中，只会创建一张表
   
 
 # shutdown 接口
@@ -26,13 +26,12 @@
 + 当本接口返回时，要求所有数据已落盘持久化
   
 
-# upsert 接口
+# write 接口
 + 写入若干行数据到某一表中
 + 传入表名，行（Row）对象，其中每个 Row 对象必须包含全部列，不允许空列（评测程序会保证这一点），注意长度为 0 的字符串不属于空列
 + 接口成功返回后，要求写入的数据立即可读
 + 本接口必须支持并发调用（Multi-thread friendly）
-+ 如果数据库中已存在某行（vin + timestamp 组合已存在），覆盖先前的行
-+ 选手不可以直接缓存入参对象 wReq 的指针，因为该对象在 upsert 接口返回后会被清理（例如 String ColumnValue ByteBuffer 中的数据）
++ 如果数据库中已存在某行（vin + timestamp 组合已存在），则行为未定义（评测时不会出现这种情况）
   
 
 # executeLatestQuery 接口
@@ -42,7 +41,7 @@
 + 如果某个 vin 在数据库中不存在，则跳过该 vin
 + 本接口必须支持并发调用（Multi-thread friendly）
 + 返回值必须是 java.util.ArrayList 类型，不能继承该类型返回其子类对象
-+ 初赛不考察返回结果 ArrayList 中元素的顺序，只要所有结果都包含在 ArrayList 中即可
++ 不考察返回结果 ArrayList 中元素的顺序，只要所有结果都包含在 ArrayList 中即可
   
 
 # executeTimeRangeQuery 接口
@@ -53,5 +52,27 @@
 + 如果 vin 在数据库中不存在，返回空集合
 + 本接口必须支持并发调用（Multi-thread friendly）
 + 返回值必须是 java.util.ArrayList 类型，不能继承该类型返回其子类对象
-+ 初赛不考察返回结果 ArrayList 中元素的顺序，只要所有结果都包含在 ArrayList 中即可
++ 不考察返回结果 ArrayList 中元素的顺序，只要所有结果都包含在 ArrayList 中即可
+
+# executeAggregateQuery 接口
++ 获取某一个 vin 在指定时间范围内的某个列的数据聚合值
++ 获取的列的 timestamp 应该位于 timeLowerBound 和 timeUpperBound 之间，不包括 timeUpperBound
++ timeLowerBound < timeUpperBound
++ columnName 为需要聚合的列的名称
++ aggregator 为聚合函数，目前只有 AVG 和 MAX 两种。返回值类型可参见`Aggregator`定义
++ 如果指定的时间范围在数据库中的数据集中不命中任何数据，则返回 空集合，否则结果中应仅包含 1 行
++ 本接口必须支持并发调用（Multi-thread friendly）
+
+# executeDownsampleQuery 接口
++ 对某一个 vin 在指定时间范围内的某个列的数据基于时间进行分段聚合（降采样）
++ 获取的列的 timestamp 应该位于 timeLowerBound 和 timeUpperBound 之间，不包括 timeUpperBound
++ timeLowerBound < timeUpperBound
++ columnName 为需要聚合的列的名称
++ aggregator 为聚合函数，目前只有 AVG 和 MAX 两种。返回值类型可参见`Aggregator`定义
++ interval 时间窗口分段的窗口跨度。出于赛题简化的考虑, 评测会保证 interval 一定可以被 (timeUpperBound - timeLowerBound) 整除
++ 某一个时间窗口分段指定的时间范围在数据库中的数据集中不命中任何数据，则该时间分段所对应的行不应该包含在结果中
++ columnFilter 是一个比较表达式，用于过滤列的值，只有满足该表达式的列才会参与聚合计算。假如一个时间窗口内存在数据，但目标列的数据都不满足过滤条件，那么这个窗口仍然需要返回对应的行，只是该行的该列对应的值应该为 NaN（NaN 定义见`Aggregator`的说明），这与该时间范围内未命中任何数据的行为是不同的
++ `TimeRangeDownsampleRequest`中的`columnFilter`只作用于聚合计算时的列值过滤, 与 SQL 中作用于聚合算子的`FILTER`子句语义类似
++ 本接口必须支持并发调用（Multi-thread friendly）
++ 关于该接口行为详细说明，可参考 `TSDBEngine#executeDownsampleQuery()` 接口注释中的示例
   

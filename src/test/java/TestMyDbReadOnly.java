@@ -19,8 +19,8 @@
  * limitations under the License.
  */
 
+import com.alibaba.lindorm.contest.LsmTSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
-import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.structs.LatestQueryRequest;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.TimeRangeQueryRequest;
@@ -43,7 +43,7 @@ public class TestMyDbReadOnly {
             throw new IllegalStateException("Clean the directory before we start the demo");
         }
 
-        TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
+        TSDBEngine tsdbEngineSample = new LsmTSDBEngineImpl(dataDir);
         String str = "12345678912345678";
 
         try {

@@ -20,12 +20,11 @@
  */
 
 import com.alibaba.lindorm.contest.CommonUtils;
+import com.alibaba.lindorm.contest.LsmTSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
-import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -49,7 +48,7 @@ public class TestMyDbMt {
             throw new IllegalStateException("Cannot create the temp data directory: " + dataDir);
         }
 
-        TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
+        TSDBEngine tsdbEngineSample = new LsmTSDBEngineImpl(dataDir);
         String str = "12345678912345678";
         String str1 = "123456789123456789";
 
@@ -84,7 +83,7 @@ public class TestMyDbMt {
                     try {
                         ArrayList<Row> rowList = new ArrayList<>();
                         rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), finalI, columns));
-                        tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+                        tsdbEngineSample.write(new WriteRequest("test", rowList));
                     } catch (Throwable e) {
                         e.printStackTrace();
                     }
@@ -93,7 +92,7 @@ public class TestMyDbMt {
                     try {
                         ArrayList<Row> rowList = new ArrayList<>();
                         rowList.add(new Row(new Vin(str1.getBytes(StandardCharsets.UTF_8)), finalI, columns));
-                        tsdbEngineSample.upsert(new WriteRequest("test", rowList));
+                        tsdbEngineSample.write(new WriteRequest("test", rowList));
                     } catch (Throwable e) {
                         e.printStackTrace();
                     }

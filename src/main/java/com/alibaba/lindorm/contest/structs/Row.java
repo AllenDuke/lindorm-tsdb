@@ -20,48 +20,43 @@
 
 package com.alibaba.lindorm.contest.structs;
 
-import com.alibaba.lindorm.contest.CommonUtils;
-
-import java.nio.ByteBuffer;
 import java.util.Map;
 
 /**
  * A row corresponds to a specific vin.
  * One vin may have several rows, where each row has its unique timestamp.
- * In write request, the fields contains all columns in our schema, which
+ * In write request, the columns map contains all columns in our schema, which
  * form a complete row. In read request, the result may only contain several
  * columns according to our request.
  */
 public class Row {
-    private final Vin vin;
-    private final long timestamp;
+  private final Vin vin;
+  private final long timestamp;
 
-    // For write request, this map must contain all columns defined in schema.
-    // For read request, this is the result set only containing the columns we queried.
-    @Constant
-    private final Map<String, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
+  // For write request, this map must contain all columns defined in schema.
+  // For read request, this is the result set only containing the columns we queried.
+  @Constant private final Map<String, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
 
-    public Row(Vin vin, long timestamp, @Constant Map<String, ColumnValue> columns) {
-        this.vin = vin;
-        this.timestamp = timestamp;
-        this.columns = columns;
-    }
+  public Row(Vin vin, long timestamp, @Constant Map<String, ColumnValue> columns) {
+    this.vin = vin;
+    this.timestamp = timestamp;
+    this.columns = columns;
+  }
 
-    public Vin getVin() {
-        return vin;
-    }
+  public Vin getVin() {
+    return vin;
+  }
 
-    public long getTimestamp() {
-        return timestamp;
-    }
+  public long getTimestamp() {
+    return timestamp;
+  }
 
-    public @Constant
-    Map<String, ColumnValue> getColumns() {
-        return columns;
-    }
+  public @Constant Map<String, ColumnValue> getColumns() {
+    return columns;
+  }
 
-    @Override
-    public String toString() {
-        return String.format("Row. Vin: [%s]. Timestamp: [%d]. Columns: [%s]", vin, timestamp, columns);
-    }
+  @Override
+  public String toString() {
+    return String.format("Row. Vin: [%s]. Timestamp: [%d]. Columns: [%s]", vin, timestamp, columns);
+  }
 }

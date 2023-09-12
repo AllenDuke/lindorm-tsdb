@@ -24,6 +24,12 @@ public class CommonUtils {
         out.write(b);
     }
 
+    public static void writeShort(OutputStream out, short v) throws IOException {
+        byte[] b = new byte[2];
+        UNSAFE.putShortUnaligned(b, ARRAY_BASE_OFFSET, v, true);
+        out.write(b);
+    }
+
     public static void writeDouble(OutputStream out, double v) throws IOException {
         writeLong(out, Double.doubleToLongBits(v));
     }

@@ -8,10 +8,22 @@ import java.util.List;
 public class TableSchema {
 
     public static class Column {
-
         String columnName;
 
         ColumnValue.ColumnType columnType;
+
+        @Override
+        public int hashCode() {
+            return columnName.hashCode() + columnType.ordinal();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof Column)) {
+                return false;
+            }
+            return ((Column) obj).columnName.equals(this.columnName) && ((Column) obj).columnType.equals(this.columnType);
+        }
     }
 
     private final List<Column> columnList;
@@ -25,7 +37,6 @@ public class TableSchema {
             columnList.add(column);
         }
     }
-
 
     public List<Column> getColumnList() {
         return columnList;

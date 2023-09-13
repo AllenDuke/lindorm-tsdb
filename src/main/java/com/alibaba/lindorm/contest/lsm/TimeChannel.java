@@ -102,10 +102,10 @@ public class TimeChannel {
 
         MappedByteBuffer byteBuffer = timeIndexInput.map(FileChannel.MapMode.READ_ONLY, 0, timeIndexInput.size());
         if (byteBuffer.limit() != timeIndexInput.size()) {
-            throw new IllegalStateException("全量读取稀疏索引失败");
+            throw new IllegalStateException("全量读取主键稀疏索引失败");
         }
         if (byteBuffer.limit() % TimeIndexItem.SIZE != 0) {
-            throw new IllegalStateException("稀疏索引文件损坏");
+            throw new IllegalStateException("主键稀疏索引文件损坏");
         }
         int indexItemCount = byteBuffer.limit() / TimeIndexItem.SIZE;
 
@@ -121,7 +121,7 @@ public class TimeChannel {
         return timeItemList;
     }
 
-    public List<TimeItem> range(long l, long r, int batchNum) throws IOException {
+    private List<TimeItem> range(long l, long r, int batchNum) throws IOException {
         List<TimeItem> timeItemList = new ArrayList<>();
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);

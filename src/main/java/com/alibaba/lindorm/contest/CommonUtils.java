@@ -86,13 +86,13 @@ public class CommonUtils {
 
     public static void writeString(OutputStream out, ByteBuffer v) throws IOException {
         int zip = v.remaining();
-        if (v.remaining() > 0) {
-            byte[] gZip = gZip(v.array());
-            if (gZip.length < v.remaining()) {
-                v = ByteBuffer.wrap(gZip);
-                zip = -v.remaining();
-            }
-        }
+//        if (v.remaining() > 0) {
+//            byte[] gZip = gZip(v.array());
+//            if (gZip.length < v.remaining()) {
+//                v = ByteBuffer.wrap(gZip);
+//                zip = -v.remaining();
+//            }
+//        }
 
         writeInt(out, zip);
         if (v.remaining() > 0) {

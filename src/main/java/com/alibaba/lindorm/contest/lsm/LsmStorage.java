@@ -3,9 +3,11 @@ package com.alibaba.lindorm.contest.lsm;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.Row;
 import com.alibaba.lindorm.contest.structs.Vin;
+import com.sun.jdi.IntegerValue;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,5 +70,35 @@ public class LsmStorage {
                 throw new IllegalStateException(v.getColumnType() + "列插入失败");
             }
         });
+    }
+
+    public List<Row> range(long l, long r) throws IOException {
+        List<TimeItem> timeRange = timeChannel.range(l, r);
+        if (timeRange.isEmpty()) {
+            return new ArrayList<>(0);
+        }
+
+        ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
+        Map<String, List<ColumnValue>> columnValueListMap = new HashMap<>(columnChannelMap.size());
+        columnChannelMap.forEach((k, v) -> {
+            try {
+                List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
+                List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
+                for (ColumnItem<ColumnValue> columnItem : columnItemList) {
+                    columnValueList.add(columnItem.getItem());
+                }
+                columnValueListMap.put(k.columnName, columnValueList);
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new IllegalStateException(k.columnType + "列查询失败");
+            }
+        });
+        for (int i = 0; i < timeRange.size(); i++) {
+            Map<String, ColumnValue> columnValueMap = new HashMap<>(columnValueListMap.size());
+            int finalI = i;
+            columnValueListMap.forEach((k, v) -> columnValueMap.put(k, v.get(finalI)));
+            rowList.add(new Row(vin, timeRange.get(i).getTime(), columnValueMap));
+        }
+        return rowList;
     }
 }

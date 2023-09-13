@@ -1,6 +1,8 @@
 package com.alibaba.lindorm.contest.lsm;
 
-public class ColumnItem<I> {
+import com.alibaba.lindorm.contest.structs.ColumnValue;
+
+public class ColumnItem<I extends ColumnValue> {
 
     private I item;
 

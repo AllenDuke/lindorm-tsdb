@@ -32,7 +32,7 @@ public class LsmStorage {
 
     private final TimeChannel timeChannel;
 
-    public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) throws IOException {
+    public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         this.dir = new File(dbDir.getAbsolutePath(), vinStr);
         if (!dir.exists()) {
@@ -41,18 +41,23 @@ public class LsmStorage {
 
         this.vin = vin;
         this.tableSchema = tableSchema;
-        this.timeChannel = new TimeChannel(dir);
+        try {
+            this.timeChannel = new TimeChannel(dir);
 
-        for (TableSchema.Column column : tableSchema.getColumnList()) {
-            if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
-                columnChannelMap.put(column, new IntChannel(dir, column));
-            } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-                columnChannelMap.put(column, new DoubleChannel(dir, column));
-            } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-                columnChannelMap.put(column, new StringChannel(dir, column));
-            } else {
-                throw new IllegalStateException("无效列类型");
+            for (TableSchema.Column column : tableSchema.getColumnList()) {
+                if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
+                    columnChannelMap.put(column, new IntChannel(dir, column));
+                } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
+                    columnChannelMap.put(column, new DoubleChannel(dir, column));
+                } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
+                    columnChannelMap.put(column, new StringChannel(dir, column));
+                } else {
+                    throw new IllegalStateException("无效列类型");
+                }
             }
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new IllegalStateException("LsmStorage初始化失败");
         }
     }
 
@@ -100,5 +105,17 @@ public class LsmStorage {
             rowList.add(new Row(vin, timeRange.get(i).getTime(), columnValueMap));
         }
         return rowList;
+    }
+
+    public void shutdown() {
+        try {
+            timeChannel.shutdownAndIndex();
+            for (ColumnChannel columnChannel : columnChannelMap.values()) {
+                columnChannel.shutdown();
+            }
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
+            throw new IllegalStateException("LsmStorage shutdown failed.");
+        }
     }
 }

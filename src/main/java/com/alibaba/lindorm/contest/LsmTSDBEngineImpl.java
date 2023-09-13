@@ -7,6 +7,8 @@
 
 package com.alibaba.lindorm.contest;
 
+import com.alibaba.lindorm.contest.lsm.LsmStorage;
+import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
@@ -32,6 +34,7 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
     private static final int NUM_FOLDERS = 300;
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, OutputStream> DATA_FILES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, FileChannel> INDEX_FILES = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, Long> DATA_FILE_POSS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LatestRowInfo> LATEST_ROW_INFOS = new ConcurrentHashMap<>();
@@ -41,6 +44,7 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
     private int columnsNum;
     private ArrayList<String> columnsName;
     private ArrayList<ColumnValue.ColumnType> columnsType;
+    private TableSchema tableSchema;
 
     /**
      * This constructor's function signature should not be modified.
@@ -80,6 +84,7 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
                 }
             }
         }
+        tableSchema = new TableSchema(columnsName, columnsType);
         connected = true;
     }
 
@@ -95,6 +100,8 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
             columnsName.add(entry.getKey());
             columnsType.add(entry.getValue());
         }
+
+        tableSchema = new TableSchema(columnsName, columnsType);
     }
 
     @Override
@@ -115,6 +122,11 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
         }
         DATA_FILES.clear();
         VIN_LOCKS.clear();
+
+        for (LsmStorage lsmStorage : LSM_STORAGES.values()) {
+            lsmStorage.shutdown();
+        }
+        LSM_STORAGES.clear();
 
         for (Map.Entry<Vin, LatestRowInfo> entry : LATEST_ROW_INFOS.entrySet()) {
             Vin vin = entry.getKey();
@@ -148,6 +160,7 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
         }
         columnsName.clear();
         columnsType.clear();
+        tableSchema = null;
         connected = false;
         System.out.println("shutdown done");
     }
@@ -207,22 +220,21 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
             Vin vin = row.getVin();
             Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
             lock.lock();
-            try {
-                Long filePos = DATA_FILE_POSS.computeIfAbsent(vin, k -> 0L);
-                OutputStream fileOutForVin = getFileOutForVin(vin);
-                appendRowToFile(fileOutForVin, row);
 
-                LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.computeIfAbsent(vin, k -> new LatestRowInfo());
-                if (row.getTimestamp() >= latestRowInfo.timestamp) {
-                    latestRowInfo.timestamp = row.getTimestamp();
-                    latestRowInfo.pos = filePos;
-                    latestRowInfo.size = rowSize(row);
-                }
+            Long filePos = DATA_FILE_POSS.computeIfAbsent(vin, k -> 0L);
+            LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+            lsmStorage.append(row);
 
-                DATA_FILE_POSS.put(vin, filePos + rowSize(row));
-            } finally {
-                lock.unlock();
+            LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.computeIfAbsent(vin, k -> new LatestRowInfo());
+            if (row.getTimestamp() >= latestRowInfo.timestamp) {
+                latestRowInfo.timestamp = row.getTimestamp();
+                latestRowInfo.pos = filePos;
+                latestRowInfo.size = rowSize(row);
             }
+
+            DATA_FILE_POSS.put(vin, filePos + rowSize(row));
+
+            lock.unlock();
         }
     }
 
@@ -276,9 +288,6 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
             Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
             lock.lock();
 
-            OutputStream fileOutForVin = getFileOutForVin(vin);
-            fileOutForVin.flush();
-
             long latestTimestamp;
             long latestPos;
             long latestSize;
@@ -312,12 +321,8 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
 
             Row latestRow;
             try {
-                FileInputStream fin = getFileInForVin(vin);
-                FileChannel fileChannel = fin.getChannel();
-                ByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, latestPos, latestSize);
-                latestRow = readFormBuffer(vin, buffer);
-                buffer = null;
-                fin.close();
+                LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+                latestRow = lsmStorage.range(latestTimestamp, latestTimestamp + 1).get(0);
             } finally {
                 lock.unlock();
             }
@@ -339,28 +344,18 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
         Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
         lock.lock();
 
-        OutputStream fileOutForVin = getFileOutForVin(vin);
-        fileOutForVin.flush();
+        LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+        List<Row> range = lsmStorage.range(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound());
+        for (Row row : range) {
+            Map<String, ColumnValue> filteredColumns = new HashMap<>();
+            Map<String, ColumnValue> columns = row.getColumns();
 
-        try {
-            FileInputStream fin = getFileInForVin(trReadReq.getVin());
-            while (fin.available() > 0) {
-                Row row = readRowFromStream(vin, fin);
-                long timestamp = row.getTimestamp();
-                if (timestamp >= trReadReq.getTimeLowerBound() && timestamp < trReadReq.getTimeUpperBound()) {
-                    Map<String, ColumnValue> filteredColumns = new HashMap<>();
-                    Map<String, ColumnValue> columns = row.getColumns();
-
-                    for (String key : trReadReq.getRequestedColumns())
-                        filteredColumns.put(key, columns.get(key));
-                    ans.add(new Row(vin, timestamp, filteredColumns));
-                }
-            }
-            fin.close();
-        } finally {
-            lock.unlock();
+            for (String key : trReadReq.getRequestedColumns())
+                filteredColumns.put(key, columns.get(key));
+            ans.add(new Row(vin, row.getTimestamp(), filteredColumns));
         }
 
+        lock.unlock();
         return new ArrayList<>(ans);
     }
 

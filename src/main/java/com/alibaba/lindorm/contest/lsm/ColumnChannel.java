@@ -26,4 +26,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public abstract void append(C c) throws IOException;
 
     public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList) throws IOException;
+
+    public void shutdown() throws IOException {
+        columnOutput.flush();
+        columnOutput.close();
+        columnInput.close();
+    }
 }

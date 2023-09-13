@@ -32,13 +32,14 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
         for (TimeItem timeItem : timeItemList) {
             Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
-            timeItemSet.add(timeItem.getBatchNum());
+            timeItemSet.add(timeItem.getItemNum());
         }
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
             ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
             columnInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
+            byteBuffer.flip();
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;

@@ -16,6 +16,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private final FileChannel indexInput;
 
+    private long indexFileSize;
+
     private int batchSize;
 
     private long batchItemCount;
@@ -29,6 +31,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
         indexOutput = new BufferedOutputStream(new FileOutputStream(idxFile, true));
         indexInput = new RandomAccessFile(idxFile, "r").getChannel();
+        indexFileSize = idxFile.length();
     }
 
     @Override
@@ -37,6 +40,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         CommonUtils.writeString(columnOutput, stringColumn.getStringValue());
         batchItemCount++;
         batchSize += 4 + stringColumn.getStringValue().limit();
+
+        checkAndIndex();
     }
 
     public boolean shutdownAndIndex() throws IOException {
@@ -50,6 +55,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private void batchIndex() throws IOException {
         CommonUtils.writeInt(indexOutput, batchSize);
+        indexFileSize += 4;
         batchItemCount = 0;
         batchSize = 0;
     }
@@ -70,10 +76,10 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
         for (TimeItem timeItem : timeItemList) {
             Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
-            timeItemSet.add(timeItem.getBatchNum());
+            timeItemSet.add(timeItem.getItemNum());
         }
 
-        MappedByteBuffer byteBuffer = indexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexInput.size());
+        MappedByteBuffer byteBuffer = indexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
         if (byteBuffer.limit() != indexInput.size()) {
             throw new IllegalStateException("全量读取稀疏索引失败");
         }
@@ -102,6 +108,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(size);
         columnInput.read(byteBuffer, pos);
+        byteBuffer.flip();
 
         int posInBatch = 0;
         do {
@@ -133,5 +140,14 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
 
         return new ColumnValue.StringColumn(wrap);
+    }
+
+    @Override
+    public void shutdown() throws IOException {
+        shutdownAndIndex();
+        indexOutput.flush();
+        indexOutput.close();
+        indexInput.close();
+        super.shutdown();
     }
 }

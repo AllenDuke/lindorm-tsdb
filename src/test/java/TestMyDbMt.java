@@ -20,7 +20,7 @@
  */
 
 import com.alibaba.lindorm.contest.CommonUtils;
-import com.alibaba.lindorm.contest.LsmTSDBEngineImpl;
+import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
 import com.alibaba.lindorm.contest.structs.*;
 
@@ -48,7 +48,7 @@ public class TestMyDbMt {
             throw new IllegalStateException("Cannot create the temp data directory: " + dataDir);
         }
 
-        TSDBEngine tsdbEngineSample = new LsmTSDBEngineImpl(dataDir);
+        TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
         String str = "12345678912345678";
         String str1 = "123456789123456789";
 

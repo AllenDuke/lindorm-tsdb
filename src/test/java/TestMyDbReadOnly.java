@@ -19,12 +19,9 @@
  * limitations under the License.
  */
 
-import com.alibaba.lindorm.contest.LsmTSDBEngineImpl;
+import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
-import com.alibaba.lindorm.contest.structs.LatestQueryRequest;
-import com.alibaba.lindorm.contest.structs.Row;
-import com.alibaba.lindorm.contest.structs.TimeRangeQueryRequest;
-import com.alibaba.lindorm.contest.structs.Vin;
+import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -43,7 +40,7 @@ public class TestMyDbReadOnly {
             throw new IllegalStateException("Clean the directory before we start the demo");
         }
 
-        TSDBEngine tsdbEngineSample = new LsmTSDBEngineImpl(dataDir);
+        TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
         String str = "12345678912345678";
 
         try {
@@ -60,6 +57,37 @@ public class TestMyDbReadOnly {
 
             resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 100));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.MAX));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", 2304, 4157, Aggregator.AVG));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", 2304, 4157, Aggregator.MAX));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG, 500,
+                    new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.GREATER)));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG, 500,
+                    new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
+            showResult(resultSet);
+
+            resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.MAX, 500,
+                    new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
             showResult(resultSet);
 
             tsdbEngineSample.shutdown();

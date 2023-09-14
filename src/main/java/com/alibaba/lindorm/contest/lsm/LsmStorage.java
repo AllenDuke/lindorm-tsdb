@@ -1,8 +1,6 @@
 package com.alibaba.lindorm.contest.lsm;
 
-import com.alibaba.lindorm.contest.structs.ColumnValue;
-import com.alibaba.lindorm.contest.structs.Row;
-import com.alibaba.lindorm.contest.structs.Vin;
+import com.alibaba.lindorm.contest.structs.*;
 import com.sun.jdi.IntegerValue;
 
 import java.io.*;
@@ -28,7 +26,9 @@ public class LsmStorage {
     /**
      * 数据文件
      */
-    private final Map<TableSchema.Column, ColumnChannel> columnChannelMap = new HashMap<>();
+    private final Map<String, ColumnChannel> columnChannelMap = new HashMap<>();
+
+    private final Map<String, ColumnValue.ColumnType> columnTypeMap = new HashMap<>();
 
     private final TimeChannel timeChannel;
 
@@ -45,12 +45,13 @@ public class LsmStorage {
             this.timeChannel = new TimeChannel(dir);
 
             for (TableSchema.Column column : tableSchema.getColumnList()) {
+                columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
-                    columnChannelMap.put(column, new IntChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new IntChannel(dir, column));
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-                    columnChannelMap.put(column, new DoubleChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new DoubleChannel(dir, column));
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-                    columnChannelMap.put(column, new StringChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new StringChannel(dir, column));
                 } else {
                     throw new IllegalStateException("无效列类型");
                 }
@@ -77,6 +78,22 @@ public class LsmStorage {
         });
     }
 
+    public Row agg(long l, long r, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+        if (columnTypeMap.get(columnName).equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
+            throw new IllegalStateException("string类型不支持聚合");
+        }
+
+        List<TimeItem> timeRange = timeChannel.range(l, r);
+        if (timeRange.isEmpty()) {
+            return null;
+        }
+        ColumnChannel columnChannel = columnChannelMap.get(columnName);
+        ColumnValue agg = columnChannel.agg(timeRange, aggregator, columnFilter);
+        Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
+        columnValueMap.put(columnName, agg);
+        return new Row(null, 0, columnValueMap);
+    }
+
     public List<Row> range(long l, long r) throws IOException {
         List<TimeItem> timeRange = timeChannel.range(l, r);
         if (timeRange.isEmpty()) {
@@ -92,10 +109,10 @@ public class LsmStorage {
                 for (ColumnItem<ColumnValue> columnItem : columnItemList) {
                     columnValueList.add(columnItem.getItem());
                 }
-                columnValueListMap.put(k.columnName, columnValueList);
+                columnValueListMap.put(k, columnValueList);
             } catch (IOException e) {
                 e.printStackTrace();
-                throw new IllegalStateException(k.columnType + "列查询失败");
+                throw new IllegalStateException(k + "列查询失败");
             }
         });
         for (int i = 0; i < timeRange.size(); i++) {

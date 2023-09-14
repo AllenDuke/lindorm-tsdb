@@ -361,12 +361,45 @@ public class LsmTSDBEngineImpl extends TSDBEngine {
 
     @Override
     public ArrayList<Row> executeAggregateQuery(TimeRangeAggregationRequest aggregationReq) throws IOException {
-        return null;
+        Vin vin = aggregationReq.getVin();
+        Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+        lock.lock();
+
+        ArrayList<Row> rows = new ArrayList<>();
+
+        LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+        Row row = lsmStorage.agg(aggregationReq.getTimeLowerBound(), aggregationReq.getTimeUpperBound(), aggregationReq.getColumnName(), aggregationReq.getAggregator(), null);
+        if (row != null) {
+            rows.add(row);
+        }
+        lock.unlock();
+        return rows;
     }
 
     @Override
     public ArrayList<Row> executeDownsampleQuery(TimeRangeDownsampleRequest downsampleReq) throws IOException {
-        return null;
+        Vin vin = downsampleReq.getVin();
+        Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
+        lock.lock();
+
+        ArrayList<Row> rows = new ArrayList<>();
+
+        LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+        long seg = (downsampleReq.getTimeUpperBound() - downsampleReq.getTimeLowerBound()) / downsampleReq.getInterval();
+        if (seg == 0) {
+            Row row = lsmStorage.agg(downsampleReq.getTimeLowerBound(), downsampleReq.getTimeUpperBound(), downsampleReq.getColumnName(), downsampleReq.getAggregator(), downsampleReq.getColumnFilter());
+            if (row != null) {
+                rows.add(row);
+            }
+        } else {
+            long l = downsampleReq.getTimeLowerBound();
+            long r = l + downsampleReq.getInterval() * seg + 1;
+
+        }
+
+
+        lock.unlock();
+        return rows;
     }
 
     private String schemaToString() {

@@ -1,6 +1,8 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
+import com.alibaba.lindorm.contest.structs.CompareExpression;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
@@ -26,6 +28,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public abstract void append(C c) throws IOException;
 
     public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList) throws IOException;
+
+    public abstract ColumnValue agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException;
 
     public void shutdown() throws IOException {
         columnOutput.flush();

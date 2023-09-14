@@ -1,7 +1,9 @@
 package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
+import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
+import com.alibaba.lindorm.contest.structs.CompareExpression;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -70,6 +72,56 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
+    public ColumnValue.StringColumn agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+        throw new IllegalStateException("string类型不支持聚合");
+//        Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
+//        for (TimeItem timeItem : timeItemList) {
+//            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+//            timeItemSet.add(timeItem.getItemNum());
+//        }
+//
+//        List<StringIndexItem> indexItemList = loadAllIndex();
+//
+//        List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
+//        for (Long batchNum : batchNumList) {
+//            ByteBuffer byteBuffer = ByteBuffer.allocate(indexItemList.get(batchNum.intValue()).getSize());
+//            columnInput.read(byteBuffer, indexItemList.get(batchNum.intValue()).getPos());
+//            byteBuffer.flip();
+//
+//            int posInBatch = 0;
+//            do {
+//                ColumnValue.StringColumn column = readFrom(byteBuffer);
+//                long itemNum = posInBatch + LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
+//                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && columnFilter.doCompare(column)) {
+//
+//                }
+//                posInBatch++;
+//            } while (byteBuffer.hasRemaining());
+//        }
+//        return null;
+    }
+
+    private List<StringIndexItem> loadAllIndex() throws IOException {
+        MappedByteBuffer byteBuffer = indexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
+        if (byteBuffer.limit() != indexInput.size()) {
+            throw new IllegalStateException("全量读取稀疏索引失败");
+        }
+        if (byteBuffer.limit() % 4 != 0) {
+            throw new IllegalStateException("稀疏索引文件损坏");
+        }
+        int indexItemCount = byteBuffer.limit() / 4;
+        List<StringIndexItem> indexItemList = new ArrayList<>(indexItemCount);
+
+        indexItemList.add(new StringIndexItem(0, 0, byteBuffer.getInt()));
+
+        for (int i = 1; i < indexItemCount; i++) {
+            StringIndexItem indexItem = indexItemList.get(i - 1);
+            indexItemList.add(new StringIndexItem(i, indexItem.getPos() + indexItem.getSize(), byteBuffer.getInt()));
+        }
+        return indexItemList;
+    }
+
+    @Override
     public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList) throws IOException {
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
@@ -79,26 +131,11 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             timeItemSet.add(timeItem.getItemNum());
         }
 
-        MappedByteBuffer byteBuffer = indexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
-        if (byteBuffer.limit() != indexInput.size()) {
-            throw new IllegalStateException("全量读取稀疏索引失败");
-        }
-        if (byteBuffer.limit() % 4 != 0) {
-            throw new IllegalStateException("稀疏索引文件损坏");
-        }
-        int indexItemCount = byteBuffer.limit() / 4;
-        long[] batchPoss = new long[indexItemCount];
-        int[] batchSizes = new int[indexItemCount];
-        batchPoss[0] = 0;
-        batchSizes[0] = byteBuffer.getInt();
-        for (int i = 1; i < indexItemCount; i++) {
-            batchPoss[i] = batchPoss[i - 1] + batchSizes[i - 1];
-            batchSizes[i] = byteBuffer.getInt();
-        }
+        List<StringIndexItem> indexItemList = loadAllIndex();
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            columnItemList.addAll(range(batchNum, batchPoss[batchNum.intValue()], batchSizes[batchNum.intValue()], batchTimeItemSetMap.get(batchNum)));
+            columnItemList.addAll(range(batchNum, indexItemList.get(batchNum.intValue()).getPos(), indexItemList.get(batchNum.intValue()).getSize(), batchTimeItemSetMap.get(batchNum)));
         }
         return columnItemList;
     }

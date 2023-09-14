@@ -65,12 +65,8 @@ public class LsmStorage {
     public void append(Row row) throws IOException {
         timeChannel.append(row.getTimestamp());
         row.getColumns().forEach((k, v) -> {
-            TableSchema.Column column = new TableSchema.Column();
-            column.columnName = k;
-            column.columnType = v.getColumnType();
-
             try {
-                columnChannelMap.get(column).append(v);
+                columnChannelMap.get(k).append(v);
             } catch (IOException e) {
                 e.printStackTrace();
                 throw new IllegalStateException(v.getColumnType() + "列插入失败");
@@ -134,5 +130,9 @@ public class LsmStorage {
             ioException.printStackTrace();
             throw new IllegalStateException("LsmStorage shutdown failed.");
         }
+    }
+
+    public Vin getVin() {
+        return vin;
     }
 }

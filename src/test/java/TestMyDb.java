@@ -137,6 +137,13 @@ public class TestMyDb {
             showResult(resultSet);
 
             tsdbEngineSample.shutdown();
+
+            tsdbEngineSample.connect();
+            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(300)));
+            rowList.clear();
+            rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12346, columns));
+            tsdbEngineSample.write(new WriteRequest("test", rowList));
+            tsdbEngineSample.shutdown();
         } catch (IOException e) {
             System.out.println(e.getMessage());
         }

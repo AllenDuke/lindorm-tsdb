@@ -136,7 +136,6 @@ public class LsmStorage {
 
     public void shutdown() {
         try {
-
             ByteBuffer allocate = ByteBuffer.allocate(8);
             allocate.putLong(latestTime);
             allocate.flip();

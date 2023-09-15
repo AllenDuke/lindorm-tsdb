@@ -137,6 +137,9 @@ public class TimeChannel {
     }
 
     public List<TimeItem> range(long l, long r) throws IOException {
+        timeOutput.flush();
+        timeIndexOutput.flush();
+
         List<TimeItem> timeItemList = new ArrayList<>();
 
         MappedByteBuffer byteBuffer = timeIndexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
@@ -169,9 +172,6 @@ public class TimeChannel {
     }
 
     private List<TimeItem> range(long l, long r, int batchNum) throws IOException {
-        timeOutput.flush();
-        timeIndexOutput.flush();
-
         List<TimeItem> timeItemList = new ArrayList<>();
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);

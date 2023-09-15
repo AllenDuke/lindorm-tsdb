@@ -141,6 +141,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList) throws IOException {
+        columnOutput.flush();
+        indexOutput.flush();
+
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
@@ -159,6 +162,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet) throws IOException {
+        columnOutput.flush();
+        indexOutput.flush();
+
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(size);

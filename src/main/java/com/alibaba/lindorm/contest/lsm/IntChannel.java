@@ -29,6 +29,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList) throws IOException {
+        columnOutput.flush();
+
         List<ColumnItem<ColumnValue.IntegerColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
@@ -64,6 +66,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public ColumnValue agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+        columnOutput.flush();
+
         double sum = 0.0;
         int validCount = 0;
         int max = Integer.MIN_VALUE;

@@ -26,6 +26,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     public List<ColumnItem<ColumnValue.DoubleFloatColumn>> range(List<TimeItem> timeItemList) throws IOException {
+        columnOutput.flush();
+
         List<ColumnItem<ColumnValue.DoubleFloatColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
@@ -61,6 +63,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     public ColumnValue.DoubleFloatColumn agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+        columnOutput.flush();
+
         double sum = 0.0;
         double max = Double.MIN_VALUE;
         int validCount = 0;

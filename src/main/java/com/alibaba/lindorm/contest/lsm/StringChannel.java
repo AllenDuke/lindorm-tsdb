@@ -119,7 +119,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         int indexItemCount = byteBuffer.limit() / 4;
         List<StringIndexItem> indexItemList = new ArrayList<>(indexItemCount);
 
-        indexItemList.add(new StringIndexItem(0, 0, byteBuffer.getInt()));
+        if (indexItemCount > 0) {
+            indexItemList.add(new StringIndexItem(0, 0, byteBuffer.getInt()));
+        }
 
         for (int i = 1; i < indexItemCount; i++) {
             StringIndexItem indexItem = indexItemList.get(i - 1);
@@ -127,8 +129,12 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
 
         if (batchItemCount > 0) {
-            StringIndexItem indexItem = indexItemList.get(indexItemCount - 1);
-            indexItemList.add(new StringIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize));
+            if (indexItemCount > 0) {
+                StringIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+                indexItemList.add(new StringIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize));
+            } else {
+                indexItemList.add(new StringIndexItem(indexItemCount, 0, batchSize));
+            }
         }
         return indexItemList;
     }

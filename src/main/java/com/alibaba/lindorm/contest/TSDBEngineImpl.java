@@ -113,14 +113,18 @@ public class TSDBEngineImpl extends TSDBEngine {
                 return;
             }
 
+            long timeIndexFileSize = 0;
             for (LsmStorage lsmStorage : LSM_STORAGES.values()) {
                 Lock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantLock());
                 lock.lock();
+                timeIndexFileSize += lsmStorage.getTimeIndexFileSize();
                 lsmStorage.shutdown();
                 lock.unlock();
             }
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
+
+            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize + "B");
 
             // Persist the schema.
             try {
@@ -143,34 +147,6 @@ public class TSDBEngineImpl extends TSDBEngine {
             throwable.printStackTrace();
             throw throwable;
         }
-    }
-
-    private int rowSize(Row row) {
-        // todo 暂不计算vin
-        int size = 0;
-
-        // 时间戳
-        size += 8;
-
-        for (String columnName : columnsName) {
-            ColumnValue columnValue = row.getColumns().get(columnName);
-            switch (columnValue.getColumnType()) {
-                case COLUMN_TYPE_STRING:
-                    size += 4;
-                    size += columnValue.getStringValue().remaining();
-                    break;
-                case COLUMN_TYPE_INTEGER:
-                    size += 4;
-                    break;
-                case COLUMN_TYPE_DOUBLE_FLOAT:
-                    size += 8;
-                    break;
-                default:
-                    throw new IllegalStateException("Invalid column type");
-            }
-        }
-
-        return size;
     }
 
     @Override

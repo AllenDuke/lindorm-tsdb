@@ -104,7 +104,7 @@ public class TimeChannel {
         timeOutput.close();
         timeIndexOutput.flush();
 
-        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
+//        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
         timeIndexOutput.close();
         timeInput.close();
@@ -188,5 +188,9 @@ public class TimeChannel {
             pos++;
         }
         return timeItemList;
+    }
+
+    public long getIndexFileSize() {
+        return indexFileSize;
     }
 }

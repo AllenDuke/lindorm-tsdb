@@ -160,4 +160,8 @@ public class LsmStorage {
     public Long getLatestTime() {
         return latestTime;
     }
+
+    public long getTimeIndexFileSize() {
+        return timeChannel.getIndexFileSize();
+    }
 }

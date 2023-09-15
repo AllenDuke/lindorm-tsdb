@@ -12,8 +12,6 @@ import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
-import java.lang.ref.Cleaner;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -34,11 +32,6 @@ public class TSDBEngineImpl extends TSDBEngine {
     private static final int NUM_FOLDERS = 300;
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Vin, FileChannel> INDEX_FILES = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Vin, Long> DATA_FILE_POSS = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Vin, LatestRowInfo> LATEST_ROW_INFOS = new ConcurrentHashMap<>();
-
-
     private boolean connected = false;
     private int columnsNum;
     private ArrayList<String> columnsName;
@@ -129,24 +122,6 @@ public class TSDBEngineImpl extends TSDBEngine {
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
 
-            for (Map.Entry<Vin, LatestRowInfo> entry : LATEST_ROW_INFOS.entrySet()) {
-                Vin vin = entry.getKey();
-                LatestRowInfo latestRowInfo = entry.getValue();
-                FileChannel fileChannel = getIndexFileChannelForVin(vin);
-                try {
-                    MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, 24);
-                    buffer.putLong(latestRowInfo.timestamp);
-                    buffer.putLong(latestRowInfo.pos);
-                    buffer.putLong(latestRowInfo.size);
-                    buffer.flip();
-                    buffer.force();
-                    fileChannel.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            INDEX_FILES.clear();
-
             // Persist the schema.
             try {
                 File schemaFile = new File(getDataPath(), "schema.txt");
@@ -206,18 +181,8 @@ public class TSDBEngineImpl extends TSDBEngine {
                 Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
                 lock.lock();
 
-                Long filePos = DATA_FILE_POSS.computeIfAbsent(vin, k -> 0L);
                 LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
                 lsmStorage.append(row);
-
-                LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.computeIfAbsent(vin, k -> new LatestRowInfo());
-                if (row.getTimestamp() >= latestRowInfo.timestamp) {
-                    latestRowInfo.timestamp = row.getTimestamp();
-                    latestRowInfo.pos = filePos;
-                    latestRowInfo.size = rowSize(row);
-                }
-
-                DATA_FILE_POSS.put(vin, filePos + rowSize(row));
 
                 lock.unlock();
             }
@@ -235,40 +200,11 @@ public class TSDBEngineImpl extends TSDBEngine {
                 Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
                 lock.lock();
 
-                long latestTimestamp;
-                long latestPos;
-                long latestSize;
-                LatestRowInfo latestRowInfo = LATEST_ROW_INFOS.get(vin);
-                if (latestRowInfo != null) {
-                    // 还在内存中
-                    latestTimestamp = latestRowInfo.timestamp;
-                    latestPos = latestRowInfo.pos;
-                    latestSize = latestRowInfo.size;
-                } else {
-                    FileChannel indexChannel = getIndexFileChannelForVin(vin);
-                    if (indexChannel.size() == 0) {
-                        lock.unlock();
-                        continue;
-                    }
-                    ByteBuffer buffer = ByteBuffer.allocate(24);
-                    indexChannel.read(buffer, 0);
-                    buffer.flip();
-                    latestTimestamp = buffer.getLong();
-                    latestPos = buffer.getLong();
-                    latestSize = buffer.getLong();
-                    // help gc
-                    buffer = null;
-
-                    latestRowInfo = new LatestRowInfo();
-                    latestRowInfo.timestamp = latestTimestamp;
-                    latestRowInfo.pos = latestPos;
-                    latestRowInfo.size = latestSize;
-                    LATEST_ROW_INFOS.put(vin, latestRowInfo);
-                }
 
                 Row latestRow;
                 try {
                     LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
+                    long latestTimestamp = lsmStorage.getLatestTime();
                     latestRow = lsmStorage.range(latestTimestamp, latestTimestamp + 1).get(0);
                 } finally {
                     lock.unlock();
@@ -376,42 +312,5 @@ public class TSDBEngineImpl extends TSDBEngine {
                     .append(columnsType.get(i));
         }
         return sb.toString();
-    }
-
-    private FileChannel getIndexFileChannelForVin(Vin vin) {
-        // Try getting from already opened set.
-        FileChannel fileOut = INDEX_FILES.get(vin);
-        if (fileOut != null) {
-            return fileOut;
-        }
-
-        // The first time we open the file out stream for this vin, open a new stream and put it into opened set.
-        File vinFilePath = getVinIndexFilePath(vin);
-        try {
-            fileOut = new RandomAccessFile(vinFilePath, "rw").getChannel();
-            INDEX_FILES.put(vin, fileOut);
-            return fileOut;
-        } catch (IOException e) {
-            System.err.println("Cannot open write stream for vin file: [" + vinFilePath + "]");
-            throw new RuntimeException(e);
-        }
-    }
-
-    private File getVinIndexFilePath(Vin vin) {
-        int folderIndex = vin.hashCode() % NUM_FOLDERS;
-        File folder = new File(dataPath, String.valueOf(folderIndex));
-        String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
-        File vinFile = new File(folder.getAbsolutePath(), vinStr + ".idx");
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-        if (!vinFile.exists()) {
-            try {
-                vinFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return vinFile;
     }
 }

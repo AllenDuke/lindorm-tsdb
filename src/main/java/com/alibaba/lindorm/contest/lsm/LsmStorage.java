@@ -4,6 +4,9 @@ import com.alibaba.lindorm.contest.structs.*;
 import com.sun.jdi.IntegerValue;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,6 +35,10 @@ public class LsmStorage {
 
     private final TimeChannel timeChannel;
 
+    private final FileChannel metaChannel;
+
+    private Long latestTime;
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         this.dir = new File(dbDir.getAbsolutePath(), vinStr);
@@ -43,6 +50,14 @@ public class LsmStorage {
         this.tableSchema = tableSchema;
         try {
             this.timeChannel = new TimeChannel(dir);
+
+            File vinFile = new File(dir, vinStr + ".meta");
+            metaChannel = new RandomAccessFile(vinFile, "rw").getChannel();
+            if (metaChannel.size() == 0) {
+                latestTime = 0L;
+            } else {
+                latestTime = metaChannel.map(FileChannel.MapMode.READ_ONLY, 0, 8).getLong();
+            }
 
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 columnTypeMap.put(column.columnName, column.columnType);
@@ -63,6 +78,7 @@ public class LsmStorage {
     }
 
     public void append(Row row) throws IOException {
+        latestTime = Math.max(row.getTimestamp(), latestTime);
         timeChannel.append(row.getTimestamp());
         row.getColumns().forEach((k, v) -> {
             try {
@@ -122,6 +138,13 @@ public class LsmStorage {
 
     public void shutdown() {
         try {
+
+            ByteBuffer allocate = ByteBuffer.allocate(8);
+            allocate.putLong(latestTime);
+            allocate.flip();
+            metaChannel.write(allocate, 0);
+            metaChannel.close();
+
             timeChannel.shutdownAndIndex();
             for (ColumnChannel columnChannel : columnChannelMap.values()) {
                 columnChannel.shutdown();
@@ -134,5 +157,9 @@ public class LsmStorage {
 
     public Vin getVin() {
         return vin;
+    }
+
+    public Long getLatestTime() {
+        return latestTime;
     }
 }

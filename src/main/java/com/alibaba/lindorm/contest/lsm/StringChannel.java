@@ -18,11 +18,16 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private final FileChannel indexInput;
 
+    /**
+     * 作用于shutdown时，没有满一批。
+     */
+    private final FileChannel tmpIndexChannel;
+
     private long indexFileSize;
 
     private int batchSize;
 
-    private long batchItemCount;
+    private int batchItemCount;
 
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
@@ -34,6 +39,17 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         indexOutput = new BufferedOutputStream(new FileOutputStream(idxFile, true));
         indexInput = new RandomAccessFile(idxFile, "r").getChannel();
         indexFileSize = idxFile.length();
+
+        File tmpIdxFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
+        if (!tmpIdxFile.exists()) {
+            tmpIdxFile.createNewFile();
+        }
+        tmpIndexChannel = new RandomAccessFile(tmpIdxFile, "rw").getChannel();
+        if (tmpIndexChannel.size() != 0) {
+            MappedByteBuffer byteBuffer = tmpIndexChannel.map(FileChannel.MapMode.READ_ONLY, 0, 4 + 4);
+            batchItemCount = byteBuffer.getInt();
+            batchSize = byteBuffer.getInt();
+        }
     }
 
     @Override
@@ -44,15 +60,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         batchSize += 4 + stringColumn.getStringValue().limit();
 
         checkAndIndex();
-    }
-
-    public boolean shutdownAndIndex() throws IOException {
-        if (batchItemCount <= 0) {
-            return false;
-        }
-
-        batchIndex();
-        return true;
     }
 
     private void batchIndex() throws IOException {
@@ -118,6 +125,11 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             StringIndexItem indexItem = indexItemList.get(i - 1);
             indexItemList.add(new StringIndexItem(i, indexItem.getPos() + indexItem.getSize(), byteBuffer.getInt()));
         }
+
+        if (batchItemCount > 0) {
+            StringIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+            indexItemList.add(new StringIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize));
+        }
         return indexItemList;
     }
 
@@ -181,7 +193,14 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public void shutdown() throws IOException {
-        shutdownAndIndex();
+        if (batchItemCount > 0) {
+            MappedByteBuffer byteBuffer = tmpIndexChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 + 8 + 8 + 8);
+            byteBuffer.putInt(batchItemCount);
+            byteBuffer.putInt(batchSize);
+            byteBuffer.force();
+            tmpIndexChannel.close();
+        }
+
         indexOutput.flush();
         indexOutput.close();
         indexInput.close();

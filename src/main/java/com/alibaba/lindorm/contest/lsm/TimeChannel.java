@@ -21,6 +21,11 @@ public class TimeChannel {
 
     private final FileChannel timeIndexInput;
 
+    /**
+     * 作用于shutdown时，没有满一批。
+     */
+    private final FileChannel tmpTimeIndexChannel;
+
     private long indexFileSize;
 
     private long minTime;
@@ -29,7 +34,9 @@ public class TimeChannel {
 
     private long lastTime;
 
-    private long batchItemCount;
+    private int batchItemCount;
+
+    private final String vinStr;
 
     public TimeChannel(File vinDir) throws IOException {
         File timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -37,6 +44,8 @@ public class TimeChannel {
             timeFile.createNewFile();
         }
         timeOutput = new BufferedOutputStream(new FileOutputStream(timeFile, true));
+
+        vinStr = vinDir.getName();
 
         File timeIdxFile = new File(vinDir.getAbsolutePath(), "time.idx");
         if (!timeIdxFile.exists()) {
@@ -47,6 +56,19 @@ public class TimeChannel {
 
         timeInput = new RandomAccessFile(timeFile, "r").getChannel();
         timeIndexInput = new RandomAccessFile(timeIdxFile, "r").getChannel();
+
+        File tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
+        if (!tmpTimeIdxFile.exists()) {
+            tmpTimeIdxFile.createNewFile();
+        }
+        tmpTimeIndexChannel = new RandomAccessFile(tmpTimeIdxFile, "rw").getChannel();
+        if (tmpTimeIndexChannel.size() != 0) {
+            MappedByteBuffer byteBuffer = tmpTimeIndexChannel.map(FileChannel.MapMode.READ_ONLY, 0, 4 + 8 + 8 + 8);
+            batchItemCount = byteBuffer.getInt();
+            minTime = byteBuffer.getLong();
+            maxTime = byteBuffer.getLong();
+            lastTime = byteBuffer.getLong();
+        }
     }
 
     public void append(long time) throws IOException {
@@ -67,20 +89,26 @@ public class TimeChannel {
         checkAndIndex();
     }
 
-    public boolean shutdownAndIndex() throws IOException {
-        boolean index = false;
+    public void shutdown() throws IOException {
         if (batchItemCount > 0) {
-            batchItemCount = 0;
-            index();
-            index = true;
+            MappedByteBuffer byteBuffer = tmpTimeIndexChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 + 8 + 8 + 8);
+            byteBuffer.putInt(batchItemCount);
+            byteBuffer.putLong(minTime);
+            byteBuffer.putLong(maxTime);
+            byteBuffer.putLong(lastTime);
+            byteBuffer.force();
+            tmpTimeIndexChannel.close();
         }
+
         timeOutput.flush();
         timeOutput.close();
         timeIndexOutput.flush();
+
+        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
+
         timeIndexOutput.close();
         timeInput.close();
         timeIndexInput.close();
-        return index;
     }
 
     private void index() throws IOException {
@@ -129,6 +157,14 @@ public class TimeChannel {
             // 需要扫描这一批次
             timeItemList.addAll(range(l, r, i));
         }
+        if (batchItemCount > 0) {
+            if (l > maxTime || r <= minTime) {
+                // no need
+            } else {
+                // 需要扫描这一批次
+                timeItemList.addAll(range(l, r, indexItemCount));
+            }
+        }
         return timeItemList;
     }
 
@@ -147,7 +183,7 @@ public class TimeChannel {
         while (byteBuffer.remaining() > 0) {
             last = last + byteBuffer.getInt();
             if (last >= l && last < r) {
-                timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0  + pos));
+                timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
             }
             pos++;
         }

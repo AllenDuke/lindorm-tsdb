@@ -1,11 +1,9 @@
 package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.structs.*;
-import com.sun.jdi.IntegerValue;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -145,7 +143,7 @@ public class LsmStorage {
             metaChannel.write(allocate, 0);
             metaChannel.close();
 
-            timeChannel.shutdownAndIndex();
+            timeChannel.shutdown();
             for (ColumnChannel columnChannel : columnChannelMap.values()) {
                 columnChannel.shutdown();
             }

@@ -101,7 +101,7 @@ public class LsmStorage {
         ColumnValue agg = columnChannel.agg(timeRange, aggregator, columnFilter);
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
-        return new Row(null, 0, columnValueMap);
+        return new Row(vin, l, columnValueMap);
     }
 
     public List<Row> range(long l, long r) throws IOException {

@@ -78,6 +78,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             connected = true;
         } catch (Throwable throwable) {
             throwable.printStackTrace();
+            System.out.println("connect failed.");
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -98,7 +100,8 @@ public class TSDBEngineImpl extends TSDBEngine {
 
             tableSchema = new TableSchema(columnsName, columnsType);
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("createTable failed.");
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -141,7 +144,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             connected = false;
             System.out.println("shutdown done");
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("shutdown failed.");
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -160,7 +164,8 @@ public class TSDBEngineImpl extends TSDBEngine {
                 lock.unlock();
             }
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("write failed.");
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -195,7 +200,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
             return ans;
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("executeLatestQuery failed.");
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -222,7 +228,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             lock.unlock();
             return new ArrayList<>(ans);
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("executeTimeRangeQuery failed, l:" + trReadReq.getTimeLowerBound() + ", r:" + trReadReq.getTimeUpperBound());
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -244,7 +251,9 @@ public class TSDBEngineImpl extends TSDBEngine {
             lock.unlock();
             return rows;
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("executeTimeRangeQuery failed, l:" + aggregationReq.getTimeLowerBound()
+                    + ", r:" + aggregationReq.getTimeUpperBound() + ", agg:" + aggregationReq.getAggregator().name());
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }
@@ -269,11 +278,13 @@ public class TSDBEngineImpl extends TSDBEngine {
                 l = r;
                 r = Math.min(l + downsampleReq.getInterval(), downsampleReq.getTimeUpperBound());
             }
-
             lock.unlock();
             return rows;
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            System.out.println("executeDownsampleQuery failed, l:" + downsampleReq.getTimeLowerBound()
+                    + ", r:" + downsampleReq.getTimeUpperBound() + ", agg:" + downsampleReq.getAggregator().name()
+                    + ", interval:" + downsampleReq.getInterval());
+            throwable.printStackTrace(System.out);
             throw throwable;
         }
     }

@@ -84,7 +84,7 @@ public class TestMyDb {
             tsdbEngineSample.createTable("test", schema);
 
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < 1000; i++) {
                 rowList.clear();
                 for (int j = 0; j < 10; j++) {
                     rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), i * 10 + j, columns));

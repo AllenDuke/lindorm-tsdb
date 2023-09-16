@@ -22,6 +22,11 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
+
+    static {
+        System.out.println(Runtime.getRuntime().totalMemory() / 1024 / 1024 / 1024 + "GB");
+    }
+
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
     private boolean connected = false;

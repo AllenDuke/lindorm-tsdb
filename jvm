@@ -1,1 +1,3 @@
--Xmx6g -Xms6g
+-Xmx5g
+-Xms5g
+-XX:MaxDirectMemorySize=1024M

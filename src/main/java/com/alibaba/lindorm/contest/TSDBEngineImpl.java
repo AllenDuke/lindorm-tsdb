@@ -22,14 +22,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
-
-    private static class LatestRowInfo {
-        volatile long timestamp;
-        volatile long pos;
-        volatile long size;
-    }
-
-    private static final int NUM_FOLDERS = 300;
     private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
     private boolean connected = false;

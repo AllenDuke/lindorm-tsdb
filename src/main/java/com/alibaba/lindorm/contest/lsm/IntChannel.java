@@ -104,13 +104,16 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
         }
 
-        if (validCount == 0) {
-            return new ColumnValue.IntegerColumn(Integer.MIN_VALUE);
-        }
         if (Aggregator.AVG.equals(aggregator)) {
+            if (validCount == 0) {
+                return new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY);
+            }
             return new ColumnValue.DoubleFloatColumn(sum / validCount);
         }
         if (Aggregator.MAX.equals(aggregator)) {
+            if (validCount == 0) {
+                return new ColumnValue.IntegerColumn(Integer.MIN_VALUE);
+            }
             return new ColumnValue.IntegerColumn(max);
         }
         throw new IllegalStateException("非法聚合函数");

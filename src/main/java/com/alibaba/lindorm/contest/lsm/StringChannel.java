@@ -18,10 +18,12 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private final FileChannel indexInput;
 
+    private static int TMP_IDX_SIZE = 4 + 4;
+
     /**
      * 作用于shutdown时，没有满一批。
      */
-    private final FileChannel tmpIndexChannel;
+    private final File tmpIndexFile;
 
     private long indexFileSize;
 
@@ -40,13 +42,19 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         indexInput = new RandomAccessFile(idxFile, "r").getChannel();
         indexFileSize = idxFile.length();
 
-        File tmpIdxFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
-        if (!tmpIdxFile.exists()) {
-            tmpIdxFile.createNewFile();
-        }
-        tmpIndexChannel = new RandomAccessFile(tmpIdxFile, "rw").getChannel();
-        if (tmpIndexChannel.size() != 0) {
-            MappedByteBuffer byteBuffer = tmpIndexChannel.map(FileChannel.MapMode.READ_ONLY, 0, 4 + 4);
+        tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
+        if (tmpIndexFile.exists()) {
+            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+            FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
+            int read = fileInputStream.read(byteBuffer.array());
+            if (read != TMP_IDX_SIZE) {
+                throw new IllegalStateException("tmpIdxFile文件损坏。");
+            }
+            fileInputStream.close();
+            if (!tmpIndexFile.delete()) {
+                System.out.println(("tmpIdxFile文件删除失败。"));
+            }
+
             batchItemCount = byteBuffer.getInt();
             batchSize = byteBuffer.getInt();
         }
@@ -206,12 +214,18 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     public void shutdown() throws IOException {
         if (batchItemCount > 0) {
-            MappedByteBuffer byteBuffer = tmpIndexChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 + 8 + 8 + 8);
+            if (!tmpIndexFile.exists()) {
+                tmpIndexFile.createNewFile();
+            }
+
+            FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
+            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
             byteBuffer.putInt(batchItemCount);
             byteBuffer.putInt(batchSize);
-            byteBuffer.force();
+            fileOutputStream.write(byteBuffer.array());
+            fileOutputStream.flush();
+            fileOutputStream.close();
         }
-        tmpIndexChannel.close();
 
         indexOutput.flush();
         indexOutput.close();

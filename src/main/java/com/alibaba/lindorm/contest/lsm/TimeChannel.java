@@ -4,7 +4,6 @@ import com.alibaba.lindorm.contest.CommonUtils;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +20,9 @@ public class TimeChannel {
 
     private final FileChannel timeInput;
 
-    private final FileChannel timeIndexInput;
+    private final File timeIdxFile;
+
+    private final File tmpTimeIdxFile;
 
     private long indexFileSize;
 
@@ -40,7 +41,6 @@ public class TimeChannel {
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
 
-    private final File tmpTimeIdxFile;
 
     public TimeChannel(File vinDir) throws IOException {
         File timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -51,7 +51,7 @@ public class TimeChannel {
 
         vinStr = vinDir.getName();
 
-        File timeIdxFile = new File(vinDir.getAbsolutePath(), "time.idx");
+        timeIdxFile = new File(vinDir.getAbsolutePath(), "time.idx");
         if (!timeIdxFile.exists()) {
             timeIdxFile.createNewFile();
         }
@@ -59,8 +59,7 @@ public class TimeChannel {
         indexFileSize = timeIdxFile.length();
 
         timeInput = new RandomAccessFile(timeFile, "r").getChannel();
-        timeIndexInput = new RandomAccessFile(timeIdxFile, "r").getChannel();
-        loadAllIndex();
+        loadAllIndexForInit();
 
         tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
         if (tmpTimeIdxFile.exists()) {
@@ -75,6 +74,7 @@ public class TimeChannel {
             if (!tmpTimeIdxFile.delete()) {
                 System.out.println(("tmpTimeIdxFile文件删除失败。"));
             }
+
             ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
             batchItemCount = byteBuffer.getInt();
             minTime = byteBuffer.getLong();
@@ -125,7 +125,6 @@ public class TimeChannel {
 
         timeIndexOutput.close();
         timeInput.close();
-        timeIndexInput.close();
     }
 
     private void index() throws IOException {
@@ -154,15 +153,14 @@ public class TimeChannel {
         return true;
     }
 
-    private void loadAllIndex() throws IOException {
+    private void loadAllIndexForInit() throws IOException {
         timeIndexItemList.clear();
-        MappedByteBuffer byteBuffer = timeIndexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
-        if (byteBuffer.limit() != timeIndexInput.size()) {
-            throw new IllegalStateException("全量读取主键稀疏索引失败");
-        }
-        if (byteBuffer.limit() % TimeIndexItem.SIZE != 0) {
+        FileInputStream fileInputStream = new FileInputStream(timeIdxFile);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) timeIdxFile.length());
+        if (fileInputStream.read(byteBuffer.array()) != (int) timeIdxFile.length()) {
             throw new IllegalStateException("主键稀疏索引文件损坏");
         }
+        fileInputStream.close();
         int indexItemCount = byteBuffer.limit() / TimeIndexItem.SIZE;
 
         for (int i = 0; i < indexItemCount; i++) {

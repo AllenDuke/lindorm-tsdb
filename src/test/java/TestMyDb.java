@@ -34,16 +34,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class TestMyDb {
-    public static void main(String[] args) {
 
+    public static final long UTC = Date.UTC(1970, Calendar.FEBRUARY, 1, 0, 0, 0);
+
+    public static void main(String[] args) {
         File dataDir = new File("data_dir");
 
         if (dataDir.isFile()) {
@@ -87,7 +84,11 @@ public class TestMyDb {
             for (int i = 0; i < 1000; i++) {
                 rowList.clear();
                 for (int j = 0; j < 10; j++) {
-                    rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), i * 10 + j, columns));
+                    columns = new HashMap<>();
+                    columns.put("col1", new ColumnValue.IntegerColumn(i * 10 + j));
+                    columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i * 10 + j)));
+                    columns.put("col3", new ColumnValue.StringColumn(buffer));
+                    rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i * 10 + j, columns));
                 }
                 tsdbEngineSample.write(new WriteRequest("test", rowList));
                 System.out.println("inserted");

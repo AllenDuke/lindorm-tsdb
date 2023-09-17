@@ -16,9 +16,9 @@ public class TimeChannel {
 
     private final OutputStream timeOutput;
 
-    private final OutputStream timeIndexOutput;
+    private final File timeFile;
 
-    private final FileChannel timeInput;
+    private final OutputStream timeIndexOutput;
 
     private final File timeIdxFile;
 
@@ -41,9 +41,8 @@ public class TimeChannel {
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
 
-
     public TimeChannel(File vinDir) throws IOException {
-        File timeFile = new File(vinDir.getAbsolutePath(), "time");
+        timeFile = new File(vinDir.getAbsolutePath(), "time");
         if (!timeFile.exists()) {
             timeFile.createNewFile();
         }
@@ -58,7 +57,6 @@ public class TimeChannel {
         timeIndexOutput = new BufferedOutputStream(new FileOutputStream(timeIdxFile, true));
         indexFileSize = timeIdxFile.length();
 
-        timeInput = new RandomAccessFile(timeFile, "r").getChannel();
         loadAllIndexForInit();
 
         tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
@@ -124,7 +122,6 @@ public class TimeChannel {
 //        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
         timeIndexOutput.close();
-        timeInput.close();
     }
 
     private void index() throws IOException {
@@ -161,6 +158,10 @@ public class TimeChannel {
             throw new IllegalStateException("主键稀疏索引文件损坏");
         }
         fileInputStream.close();
+
+        if (byteBuffer.limit() % 4 != 0) {
+            throw new IllegalStateException("主键稀疏索引文件损坏");
+        }
         int indexItemCount = byteBuffer.limit() / TimeIndexItem.SIZE;
 
         for (int i = 0; i < indexItemCount; i++) {
@@ -170,9 +171,19 @@ public class TimeChannel {
         }
     }
 
+    /**
+     * todo 读写锁
+     *
+     * @param l
+     * @param r
+     * @return
+     * @throws IOException
+     */
     public List<TimeItem> range(long l, long r) throws IOException {
         timeOutput.flush();
         timeIndexOutput.flush();
+
+        RandomAccessFile timeInput = new RandomAccessFile(timeFile, "r");
 
         List<TimeItem> timeItemList = new ArrayList<>();
 
@@ -184,25 +195,28 @@ public class TimeChannel {
                 continue;
             }
             // 需要扫描这一批次
-            timeItemList.addAll(range(l, r, i));
+            timeItemList.addAll(range(l, r, i, timeInput));
         }
         if (batchItemCount > 0) {
             if (l > maxTime || r <= minTime) {
                 // no need
             } else {
                 // 需要扫描这一批次
-                timeItemList.addAll(range(l, r, indexItemCount));
+                timeItemList.addAll(range(l, r, indexItemCount, timeInput));
             }
         }
+
+        timeInput.close();
         return timeItemList;
     }
 
-    private List<TimeItem> range(long l, long r, int batchNum) throws IOException {
+    private List<TimeItem> range(long l, long r, int batchNum, RandomAccessFile timeInput) throws IOException {
         List<TimeItem> timeItemList = new ArrayList<>();
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-        timeInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
-        byteBuffer.flip();
+        timeInput.seek((long) batchNum * FULL_BATCH_SIZE);
+        int read = timeInput.read(byteBuffer.array());
+        byteBuffer.limit(read);
         int pos = 0;
         long last = byteBuffer.getLong();
         if (last >= l && last < r) {

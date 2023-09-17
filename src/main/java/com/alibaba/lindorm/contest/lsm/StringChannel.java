@@ -14,11 +14,11 @@ import java.util.stream.Collectors;
 
 public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
+    private static int TMP_IDX_SIZE = 4 + 4;
+
     private final OutputStream indexOutput;
 
-    private final FileChannel indexInput;
-
-    private static int TMP_IDX_SIZE = 4 + 4;
+    private final File indexFile;
 
     /**
      * 作用于shutdown时，没有满一批。
@@ -34,13 +34,12 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
 
-        File idxFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
-        if (!idxFile.exists()) {
-            idxFile.createNewFile();
+        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
+        if (!indexFile.exists()) {
+            indexFile.createNewFile();
         }
-        indexOutput = new BufferedOutputStream(new FileOutputStream(idxFile, true));
-        indexInput = new RandomAccessFile(idxFile, "r").getChannel();
-        indexFileSize = idxFile.length();
+        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true));
+        indexFileSize = indexFile.length();
 
         tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
         if (tmpIndexFile.exists()) {
@@ -117,10 +116,13 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     private List<StringIndexItem> loadAllIndex() throws IOException {
-        MappedByteBuffer byteBuffer = indexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
-        if (byteBuffer.limit() != indexInput.size()) {
-            throw new IllegalStateException("全量读取稀疏索引失败");
+        FileInputStream fileInputStream = new FileInputStream(indexFile);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
+        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
+            throw new IllegalStateException("稀疏索引文件损坏");
         }
+        fileInputStream.close();
+
         if (byteBuffer.limit() % 4 != 0) {
             throw new IllegalStateException("稀疏索引文件损坏");
         }
@@ -229,7 +231,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         indexOutput.flush();
         indexOutput.close();
-        indexInput.close();
         super.shutdown();
     }
 }

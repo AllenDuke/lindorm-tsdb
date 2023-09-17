@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
@@ -27,7 +28,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         System.out.println(Runtime.getRuntime().totalMemory() / 1024 / 1024 / 1024 + "GB");
     }
 
-    private static final ConcurrentMap<Vin, Lock> VIN_LOCKS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Vin, ReentrantReadWriteLock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
     private boolean connected = false;
     private int columnsNum;
@@ -115,11 +116,11 @@ public class TSDBEngineImpl extends TSDBEngine {
 
             long timeIndexFileSize = 0;
             for (LsmStorage lsmStorage : LSM_STORAGES.values()) {
-                Lock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantLock());
-                lock.lock();
+                ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantReadWriteLock());
+                lock.writeLock().lock();
                 timeIndexFileSize += lsmStorage.getTimeIndexFileSize();
                 lsmStorage.shutdown();
-                lock.unlock();
+                lock.writeLock().unlock();
             }
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
@@ -155,13 +156,13 @@ public class TSDBEngineImpl extends TSDBEngine {
         try {
             for (Row row : wReq.getRows()) {
                 Vin vin = row.getVin();
-                Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-                lock.lock();
+                ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
+                lock.writeLock().lock();
 
                 LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
                 lsmStorage.append(row);
 
-                lock.unlock();
+                lock.writeLock().unlock();
             }
         } catch (Throwable throwable) {
             System.out.println("write failed.");
@@ -175,9 +176,8 @@ public class TSDBEngineImpl extends TSDBEngine {
         try {
             ArrayList<Row> ans = new ArrayList<>();
             for (Vin vin : pReadReq.getVins()) {
-                Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-                lock.lock();
-
+                ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
+                lock.readLock().lock();
 
                 Row latestRow;
                 try {
@@ -188,7 +188,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                     }
                     latestRow = lsmStorage.range(latestTimestamp, latestTimestamp + 1).get(0);
                 } finally {
-                    lock.unlock();
+                    lock.readLock().unlock();
                 }
 
                 Map<String, ColumnValue> filteredColumns = new HashMap<>();
@@ -211,8 +211,8 @@ public class TSDBEngineImpl extends TSDBEngine {
         try {
             Set<Row> ans = new HashSet<>();
             Vin vin = trReadReq.getVin();
-            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-            lock.lock();
+            ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
+            lock.readLock().lock();
 
             LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
             List<Row> range = lsmStorage.range(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound());
@@ -225,7 +225,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                 ans.add(new Row(vin, row.getTimestamp(), filteredColumns));
             }
 
-            lock.unlock();
+            lock.readLock().unlock();
             return new ArrayList<>(ans);
         } catch (Throwable throwable) {
             System.out.println("executeTimeRangeQuery failed, l:" + trReadReq.getTimeLowerBound() + ", r:" + trReadReq.getTimeUpperBound());
@@ -238,8 +238,8 @@ public class TSDBEngineImpl extends TSDBEngine {
     public ArrayList<Row> executeAggregateQuery(TimeRangeAggregationRequest aggregationReq) throws IOException {
         try {
             Vin vin = aggregationReq.getVin();
-            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-            lock.lock();
+            ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
+            lock.readLock().lock();
 
             ArrayList<Row> rows = new ArrayList<>();
 
@@ -248,7 +248,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             if (row != null) {
                 rows.add(row);
             }
-            lock.unlock();
+            lock.readLock().unlock();
             return rows;
         } catch (Throwable throwable) {
             System.out.println("executeTimeRangeQuery failed, l:" + aggregationReq.getTimeLowerBound()
@@ -262,8 +262,8 @@ public class TSDBEngineImpl extends TSDBEngine {
     public ArrayList<Row> executeDownsampleQuery(TimeRangeDownsampleRequest downsampleReq) throws IOException {
         try {
             Vin vin = downsampleReq.getVin();
-            Lock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantLock());
-            lock.lock();
+            ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
+            lock.readLock().lock();
 
             ArrayList<Row> rows = new ArrayList<>();
 
@@ -278,7 +278,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                 l = r;
                 r = Math.min(l + downsampleReq.getInterval(), downsampleReq.getTimeUpperBound());
             }
-            lock.unlock();
+            lock.readLock().unlock();
             return rows;
         } catch (Throwable throwable) {
             System.out.println("executeDownsampleQuery failed, l:" + downsampleReq.getTimeLowerBound()

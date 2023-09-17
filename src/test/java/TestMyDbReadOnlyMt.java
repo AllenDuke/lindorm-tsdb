@@ -59,44 +59,16 @@ public class TestMyDbReadOnlyMt {
                         ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
                         showResult(resultSet);
 
-                        Thread.currentThread().interrupt();
-
-                        resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 100));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.MAX));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", 2304, 4157, Aggregator.AVG));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeAggregationRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", 2304, 4157, Aggregator.MAX));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG, 500,
-                                new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.GREATER)));
-                        showResult(resultSet);
-
-                        resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.AVG, 500,
+                        resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
+                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
+                                TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.MAX, TestMyDb.ITEM_CNT / 10,
                                 new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
                         showResult(resultSet);
 
                         resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", 2304, 4157, Aggregator.MAX, 500,
-                                new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
+                                new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
+                                TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.MAX, TestMyDb.ITEM_CNT / 10,
+                                new CompareExpression(new ColumnValue.DoubleFloatColumn(TestMyDb.UTC), CompareExpression.CompareOp.EQUAL)));
                         showResult(resultSet);
                     } catch (Throwable e) {
                         e.printStackTrace();

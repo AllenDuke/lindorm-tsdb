@@ -82,8 +82,10 @@ public class TestMyDb {
 
             tsdbEngineSample.createTable("test", schema);
 
+            long begin = System.currentTimeMillis();
+
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 10000000; i++) {
+            for (int i = 0; i < 20000000; i++) {
                 rowList.clear();
 
                 columns = new HashMap<>();
@@ -119,6 +121,8 @@ public class TestMyDb {
 //            tsdbEngineSample.upsert(new WriteRequest("test", rowList));
 
             tsdbEngineSample.shutdown();
+
+            System.out.println((System.currentTimeMillis() - begin));
 
             // Stage2: read
             tsdbEngineSample.connect();

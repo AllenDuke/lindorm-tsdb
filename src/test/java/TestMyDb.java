@@ -40,6 +40,8 @@ public class TestMyDb {
 
     public static final long UTC = Date.UTC(1970, Calendar.FEBRUARY, 1, 0, 0, 0);
 
+    public static final int ITEM_CNT = 10000000;
+
     public static void main(String[] args) {
         File dataDir = new File("data_dir");
 
@@ -81,23 +83,17 @@ public class TestMyDb {
             tsdbEngineSample.createTable("test", schema);
 
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < 10000000; i++) {
                 rowList.clear();
-                for (int j = 0; j < 10; j++) {
-                    columns = new HashMap<>();
-                    columns.put("col1", new ColumnValue.IntegerColumn(i * 10 + j));
-                    columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i * 10 + j)));
-                    columns.put("col3", new ColumnValue.StringColumn(buffer));
-                    rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i * 10 + j, columns));
-                }
-                tsdbEngineSample.write(new WriteRequest("test", rowList));
-                System.out.println("inserted");
-            }
 
-            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(300)));
-            rowList.clear();
-            rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12345, columns));
-            tsdbEngineSample.write(new WriteRequest("test", rowList));
+                columns = new HashMap<>();
+                columns.put("col1", new ColumnValue.IntegerColumn(i));
+                columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i) * 0.1));
+                columns.put("col3", new ColumnValue.StringColumn(buffer));
+                rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
+
+                tsdbEngineSample.write(new WriteRequest("test", rowList));
+            }
 
 //            rowList.clear();
 //            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate((int) (AbPage.PAGE_SIZE + 1))));
@@ -133,17 +129,6 @@ public class TestMyDb {
             ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
             showResult(resultSet);
 
-            resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, 0, 100));
-            showResult(resultSet);
-
-            tsdbEngineSample.shutdown();
-
-            tsdbEngineSample.connect();
-            columns.put("col3", new ColumnValue.StringColumn(ByteBuffer.allocate(300)));
-            rowList.clear();
-            rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), 12346, columns));
-            tsdbEngineSample.write(new WriteRequest("test", rowList));
             tsdbEngineSample.shutdown();
         } catch (IOException e) {
             System.out.println(e.getMessage());

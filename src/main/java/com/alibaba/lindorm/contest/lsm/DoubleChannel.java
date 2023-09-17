@@ -66,7 +66,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         columnOutput.flush();
 
         double sum = 0.0;
-        double max = Double.MIN_VALUE;
+        double max = -Double.MAX_VALUE;
         int validCount = 0;
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();

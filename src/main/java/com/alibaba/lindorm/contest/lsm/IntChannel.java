@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
-    private static int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 4;
+    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 4;
 
     public IntChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
@@ -41,9 +41,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-            columnInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
-            byteBuffer.flip();
+            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -61,6 +59,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
         }
 
+        clearColumnInput();
         return columnItemList;
     }
 
@@ -80,9 +79,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-            columnInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
-            byteBuffer.flip();
+            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -103,6 +100,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 pos++;
             }
         }
+
+        clearColumnInput();
 
         if (Aggregator.AVG.equals(aggregator)) {
             if (validCount == 0) {

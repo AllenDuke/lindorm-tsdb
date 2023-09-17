@@ -10,9 +10,9 @@ import java.util.List;
 
 public class TimeChannel {
 
-    private static int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 8;
+    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 8;
 
-    private static int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
+    private static final int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
 
     private final OutputStream timeOutput;
 
@@ -117,10 +117,10 @@ public class TimeChannel {
 
         timeOutput.flush();
         timeOutput.close();
-        timeIndexOutput.flush();
 
 //        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
+        timeIndexOutput.flush();
         timeIndexOutput.close();
     }
 
@@ -183,6 +183,7 @@ public class TimeChannel {
         timeOutput.flush();
         timeIndexOutput.flush();
 
+        // todo ThreadLocal
         RandomAccessFile timeInput = new RandomAccessFile(timeFile, "r");
 
         List<TimeItem> timeItemList = new ArrayList<>();

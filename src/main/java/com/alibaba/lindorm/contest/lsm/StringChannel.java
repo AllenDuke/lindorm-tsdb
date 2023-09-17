@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
-    private static int TMP_IDX_SIZE = 4 + 4;
+    private static final int TMP_IDX_SIZE = 4 + 4;
 
     private final OutputStream indexOutput;
 
@@ -24,8 +24,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
      * 作用于shutdown时，没有满一批。
      */
     private final File tmpIndexFile;
-
-    private long indexFileSize;
 
     private int batchSize;
 
@@ -39,7 +37,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             indexFile.createNewFile();
         }
         indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true));
-        indexFileSize = indexFile.length();
 
         tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
         if (tmpIndexFile.exists()) {
@@ -71,7 +68,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private void batchIndex() throws IOException {
         CommonUtils.writeInt(indexOutput, batchSize);
-        indexFileSize += 4;
         batchItemCount = 0;
         batchSize = 0;
     }
@@ -168,6 +164,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         for (Long batchNum : batchNumList) {
             columnItemList.addAll(range(batchNum, indexItemList.get(batchNum.intValue()).getPos(), indexItemList.get(batchNum.intValue()).getSize(), batchTimeItemSetMap.get(batchNum)));
         }
+
+        clearColumnInput();
         return columnItemList;
     }
 
@@ -177,9 +175,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
 
-        ByteBuffer byteBuffer = ByteBuffer.allocate(size);
-        columnInput.read(byteBuffer, pos);
-        byteBuffer.flip();
+        ByteBuffer byteBuffer = read(pos, size);
 
         int posInBatch = 0;
         do {

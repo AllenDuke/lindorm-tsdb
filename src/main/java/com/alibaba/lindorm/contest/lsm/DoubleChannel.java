@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> {
 
-    private static int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 8 + 8;
+    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 8 + 8;
 
     public DoubleChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
@@ -38,9 +38,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-            columnInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
-            byteBuffer.flip();
+            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
             int pos = 0;
             double last = byteBuffer.getDouble();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -57,6 +55,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 pos++;
             }
         }
+
+        clearColumnInput();
 
         return columnItemList;
     }
@@ -77,9 +77,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-            columnInput.read(byteBuffer, (long) batchNum * FULL_BATCH_SIZE);
-            byteBuffer.flip();
+            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
             int pos = 0;
             double last = byteBuffer.getDouble();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -101,6 +99,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 pos++;
             }
         }
+
+        clearColumnInput();
 
         if (validCount == 0) {
             return new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY);

@@ -210,8 +210,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             byteBuffer.putInt(batchItemCount);
             byteBuffer.putInt(batchSize);
             byteBuffer.force();
-            tmpIndexChannel.close();
         }
+        tmpIndexChannel.close();
 
         indexOutput.flush();
         indexOutput.close();

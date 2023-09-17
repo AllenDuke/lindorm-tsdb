@@ -13,6 +13,8 @@ public class TimeChannel {
 
     private static int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 8;
 
+    private static int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
+
     private final OutputStream timeOutput;
 
     private final OutputStream timeIndexOutput;
@@ -20,11 +22,6 @@ public class TimeChannel {
     private final FileChannel timeInput;
 
     private final FileChannel timeIndexInput;
-
-    /**
-     * 作用于shutdown时，没有满一批。
-     */
-    private final FileChannel tmpTimeIndexChannel;
 
     private long indexFileSize;
 
@@ -37,6 +34,13 @@ public class TimeChannel {
     private int batchItemCount;
 
     private final String vinStr;
+
+    /**
+     * 主键稀疏索引常驻内存
+     */
+    private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
+
+    private final File tmpTimeIdxFile;
 
     public TimeChannel(File vinDir) throws IOException {
         File timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -56,14 +60,22 @@ public class TimeChannel {
 
         timeInput = new RandomAccessFile(timeFile, "r").getChannel();
         timeIndexInput = new RandomAccessFile(timeIdxFile, "r").getChannel();
+        loadAllIndex();
 
-        File tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
-        if (!tmpTimeIdxFile.exists()) {
-            tmpTimeIdxFile.createNewFile();
-        }
-        tmpTimeIndexChannel = new RandomAccessFile(tmpTimeIdxFile, "rw").getChannel();
-        if (tmpTimeIndexChannel.size() != 0) {
-            MappedByteBuffer byteBuffer = tmpTimeIndexChannel.map(FileChannel.MapMode.READ_ONLY, 0, 4 + 8 + 8 + 8);
+        tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
+        if (tmpTimeIdxFile.exists()) {
+            // shutdown时未满一批
+            byte[] bytes = new byte[TMP_TIME_IDX_SIZE];
+            FileInputStream fileInputStream = new FileInputStream(tmpTimeIdxFile);
+            int read = fileInputStream.readNBytes(bytes, 0, TMP_TIME_IDX_SIZE);
+            if (read != TMP_TIME_IDX_SIZE) {
+                throw new IllegalStateException("tmpTimeIdxFile文件损坏。");
+            }
+            fileInputStream.close();
+            if (!tmpTimeIdxFile.delete()) {
+                System.out.println(("tmpTimeIdxFile文件删除失败。"));
+            }
+            ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
             batchItemCount = byteBuffer.getInt();
             minTime = byteBuffer.getLong();
             maxTime = byteBuffer.getLong();
@@ -91,13 +103,18 @@ public class TimeChannel {
 
     public void shutdown() throws IOException {
         if (batchItemCount > 0) {
-            MappedByteBuffer byteBuffer = tmpTimeIndexChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 + 8 + 8 + 8);
+            if (!tmpTimeIdxFile.exists()) {
+                tmpTimeIdxFile.createNewFile();
+            }
+            FileOutputStream fileOutputStream = new FileOutputStream(tmpTimeIdxFile, false);
+            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_TIME_IDX_SIZE);
             byteBuffer.putInt(batchItemCount);
             byteBuffer.putLong(minTime);
             byteBuffer.putLong(maxTime);
             byteBuffer.putLong(lastTime);
-            byteBuffer.force();
-            tmpTimeIndexChannel.close();
+            fileOutputStream.write(byteBuffer.array());
+            fileOutputStream.flush();
+            fileOutputStream.close();
         }
 
         timeOutput.flush();
@@ -116,6 +133,7 @@ public class TimeChannel {
         TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+        timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
     }
 
@@ -136,12 +154,8 @@ public class TimeChannel {
         return true;
     }
 
-    public List<TimeItem> range(long l, long r) throws IOException {
-        timeOutput.flush();
-        timeIndexOutput.flush();
-
-        List<TimeItem> timeItemList = new ArrayList<>();
-
+    private void loadAllIndex() throws IOException {
+        timeIndexItemList.clear();
         MappedByteBuffer byteBuffer = timeIndexInput.map(FileChannel.MapMode.READ_ONLY, 0, indexFileSize);
         if (byteBuffer.limit() != timeIndexInput.size()) {
             throw new IllegalStateException("全量读取主键稀疏索引失败");
@@ -154,6 +168,20 @@ public class TimeChannel {
         for (int i = 0; i < indexItemCount; i++) {
             long minTime = byteBuffer.getLong();
             long maxTime = byteBuffer.getLong();
+            timeIndexItemList.add(new TimeIndexItem(minTime, maxTime));
+        }
+    }
+
+    public List<TimeItem> range(long l, long r) throws IOException {
+        timeOutput.flush();
+        timeIndexOutput.flush();
+
+        List<TimeItem> timeItemList = new ArrayList<>();
+
+        int indexItemCount = timeIndexItemList.size();
+        for (int i = 0; i < indexItemCount; i++) {
+            long minTime = timeIndexItemList.get(i).getMinTime();
+            long maxTime = timeIndexItemList.get(i).getMaxTime();
             if (l > maxTime || r <= minTime) {
                 continue;
             }

@@ -182,11 +182,10 @@ public class TSDBEngineImpl extends TSDBEngine {
                 Row latestRow;
                 try {
                     LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
-                    long latestTimestamp = lsmStorage.getLatestTime();
-                    if (latestTimestamp <= 0) {
+                    latestRow = lsmStorage.getLatestRow();
+                    if (latestRow == null) {
                         return ans;
                     }
-                    latestRow = lsmStorage.range(latestTimestamp, latestTimestamp + 1).get(0);
                 } finally {
                     lock.readLock().unlock();
                 }

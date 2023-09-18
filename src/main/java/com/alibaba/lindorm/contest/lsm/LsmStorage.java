@@ -37,6 +37,8 @@ public class LsmStorage {
 
     private Long latestTime;
 
+    private Row latestRow;
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         this.dir = new File(dbDir.getAbsolutePath(), vinStr);
@@ -69,13 +71,36 @@ public class LsmStorage {
                     throw new IllegalStateException("无效列类型");
                 }
             }
+            getLatestRow();
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException("LsmStorage初始化失败");
         }
     }
 
+    private Row deepClone(Row row) {
+        Map<String, ColumnValue> columns = row.getColumns();
+        Map<String, ColumnValue> columnsClone = new HashMap<>(columns.size());
+        columns.forEach((k, v) -> {
+            if (v.getColumnType() == ColumnValue.ColumnType.COLUMN_TYPE_STRING) {
+                ByteBuffer stringValue = v.getStringValue();
+
+                ByteBuffer allocate = ByteBuffer.allocate(stringValue.limit());
+                allocate.put(stringValue);
+                allocate.flip();
+
+                // 只有这个是可能会变的 其他都是final的
+                v = new ColumnValue.StringColumn(allocate);
+            }
+            columnsClone.put(k, v);
+        });
+        return new Row(row.getVin(), row.getTimestamp(), columnsClone);
+    }
+
     public void append(Row row) throws IOException {
+        if (row.getTimestamp() >= latestTime) {
+            latestRow = deepClone(row);
+        }
         latestTime = Math.max(row.getTimestamp(), latestTime);
         timeChannel.append(row.getTimestamp());
         row.getColumns().forEach((k, v) -> {
@@ -158,6 +183,17 @@ public class LsmStorage {
 
     public Long getLatestTime() {
         return latestTime;
+    }
+
+    public Row getLatestRow() throws IOException {
+        if (latestRow != null) {
+            return latestRow;
+        }
+        List<Row> rowList = range(latestTime, latestTime + 1);
+        if (rowList != null && rowList.size() > 0) {
+            latestRow = rowList.get(0);
+        }
+        return latestRow;
     }
 
     public long getTimeIndexFileSize() {

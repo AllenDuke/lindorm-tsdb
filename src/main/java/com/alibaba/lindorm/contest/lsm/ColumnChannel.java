@@ -20,7 +20,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     /**
      * todo lru
      */
-    private final Map<Thread, RandomAccessFile> columnInputThreadLocal = new ConcurrentHashMap<>();
+    private final RandomAccessFile columnInput;
 
     public ColumnChannel(File vinDir, TableSchema.Column column) throws IOException {
         columnFile = new File(vinDir.getAbsolutePath(), column.columnName);
@@ -28,6 +28,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
             columnFile.createNewFile();
         }
         columnOutput = new BufferedOutputStream(new FileOutputStream(columnFile, true));
+        columnInput = new RandomAccessFile(columnFile, "r");
     }
 
     public abstract void append(C c) throws IOException;
@@ -39,10 +40,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public void shutdown() throws IOException {
         columnOutput.flush();
         columnOutput.close();
-        for (RandomAccessFile columnInput : columnInputThreadLocal.values()) {
-            columnInput.close();
-        }
-        columnInputThreadLocal.clear();
+
+        columnInput.close();
     }
 
     /**
@@ -54,11 +53,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected ByteBuffer read(long pos, int size) throws IOException {
-        RandomAccessFile columnInput = columnInputThreadLocal.get(Thread.currentThread());
-        if (columnInput == null) {
-            columnInput = new RandomAccessFile(columnFile, "r");
-            columnInputThreadLocal.put(Thread.currentThread(), columnInput);
-        }
         ByteBuffer byteBuffer = ByteBuffer.allocate(size);
         columnInput.seek(pos);
         int read = columnInput.read(byteBuffer.array());

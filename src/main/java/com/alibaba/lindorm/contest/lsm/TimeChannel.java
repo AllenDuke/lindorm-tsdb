@@ -44,7 +44,7 @@ public class TimeChannel {
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
 
-    private Map<Thread, RandomAccessFile> timeInputThreadLocal = new ConcurrentHashMap<>();
+    private RandomAccessFile timeInput;
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -52,6 +52,8 @@ public class TimeChannel {
             timeFile.createNewFile();
         }
         timeOutput = new BufferedOutputStream(new FileOutputStream(timeFile, true));
+
+        timeInput = new RandomAccessFile(timeFile, "r");
 
         vinStr = vinDir.getName();
 
@@ -128,10 +130,7 @@ public class TimeChannel {
         timeIndexOutput.flush();
         timeIndexOutput.close();
 
-        for (RandomAccessFile timeInput : timeInputThreadLocal.values()) {
-            timeInput.close();
-        }
-        timeInputThreadLocal.clear();
+        timeInput.close();
     }
 
     private void index() throws IOException {
@@ -192,12 +191,6 @@ public class TimeChannel {
     public List<TimeItem> range(long l, long r) throws IOException {
         timeOutput.flush();
         timeIndexOutput.flush();
-
-        RandomAccessFile timeInput = timeInputThreadLocal.get(Thread.currentThread());
-        if (timeInput == null) {
-            timeInput = new RandomAccessFile(timeFile, "r");
-            timeInputThreadLocal.put(Thread.currentThread(), timeInput);
-        }
 
         List<TimeItem> timeItemList = new ArrayList<>();
 

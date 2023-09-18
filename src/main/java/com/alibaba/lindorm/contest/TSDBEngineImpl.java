@@ -184,7 +184,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             ArrayList<Row> ans = new ArrayList<>();
             for (Vin vin : pReadReq.getVins()) {
                 ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
-                lock.readLock().lock();
+                lock.writeLock().lock();
 
                 Row latestRow;
                 try {
@@ -194,7 +194,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                         return ans;
                     }
                 } finally {
-                    lock.readLock().unlock();
+                    lock.writeLock().unlock();
                 }
 
                 Map<String, ColumnValue> filteredColumns = new HashMap<>();
@@ -218,7 +218,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             Set<Row> ans = new HashSet<>();
             Vin vin = trReadReq.getVin();
             ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
-            lock.readLock().lock();
+            lock.writeLock().lock();
 
             LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
             List<Row> range = lsmStorage.range(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound());
@@ -231,7 +231,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                 ans.add(new Row(vin, row.getTimestamp(), filteredColumns));
             }
 
-            lock.readLock().unlock();
+            lock.writeLock().unlock();
             return new ArrayList<>(ans);
         } catch (Throwable throwable) {
             System.out.println("executeTimeRangeQuery failed, l:" + trReadReq.getTimeLowerBound() + ", r:" + trReadReq.getTimeUpperBound());
@@ -245,7 +245,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         try {
             Vin vin = aggregationReq.getVin();
             ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
-            lock.readLock().lock();
+            lock.writeLock().lock();
 
             ArrayList<Row> rows = new ArrayList<>();
 
@@ -254,7 +254,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             if (row != null) {
                 rows.add(row);
             }
-            lock.readLock().unlock();
+            lock.writeLock().unlock();
             return rows;
         } catch (Throwable throwable) {
             System.out.println("executeTimeRangeQuery failed, l:" + aggregationReq.getTimeLowerBound()
@@ -269,7 +269,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         try {
             Vin vin = downsampleReq.getVin();
             ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
-            lock.readLock().lock();
+            lock.writeLock().lock();
 
             ArrayList<Row> rows = new ArrayList<>();
 
@@ -284,7 +284,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                 l = r;
                 r = Math.min(l + downsampleReq.getInterval(), downsampleReq.getTimeUpperBound());
             }
-            lock.readLock().unlock();
+            lock.writeLock().unlock();
             return rows;
         } catch (Throwable throwable) {
             System.out.println("executeDownsampleQuery failed, l:" + downsampleReq.getTimeLowerBound()

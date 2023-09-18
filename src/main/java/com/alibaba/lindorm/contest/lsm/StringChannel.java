@@ -36,7 +36,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         if (!indexFile.exists()) {
             indexFile.createNewFile();
         }
-        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true));
+        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
 
         tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
         if (tmpIndexFile.exists()) {
@@ -147,8 +147,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList) throws IOException {
-        columnOutput.flush();
-        indexOutput.flush();
+        flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
@@ -167,9 +166,14 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         return columnItemList;
     }
 
-    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet) throws IOException {
-        columnOutput.flush();
+    @Override
+    public void flush() throws IOException {
         indexOutput.flush();
+        super.flush();
+    }
+
+    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet) throws IOException {
+        flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
 

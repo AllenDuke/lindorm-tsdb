@@ -27,7 +27,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         if (!columnFile.exists()) {
             columnFile.createNewFile();
         }
-        columnOutput = new BufferedOutputStream(new FileOutputStream(columnFile, true));
+        columnOutput = new BufferedOutputStream(new FileOutputStream(columnFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
         columnInput = new RandomAccessFile(columnFile, "r");
     }
 
@@ -38,10 +38,14 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public abstract ColumnValue agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException;
 
     public void shutdown() throws IOException {
-        columnOutput.flush();
+        flush();
         columnOutput.close();
 
         columnInput.close();
+    }
+
+    public void flush() throws IOException {
+        columnOutput.flush();
     }
 
     /**

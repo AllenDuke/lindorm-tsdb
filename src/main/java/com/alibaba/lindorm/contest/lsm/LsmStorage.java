@@ -6,10 +6,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class LsmStorage {
@@ -19,18 +16,63 @@ public class LsmStorage {
      */
     public static final int MAX_ITEM_CNT_L0 = 8 * 1024;
 
-    public static final ThreadPoolExecutor COLUMN_EXECUTOR = new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() * 2, 1L, TimeUnit.MINUTES, new ArrayBlockingQueue<>(MAX_ITEM_CNT_L0),
-            new ThreadPoolExecutor.CallerRunsPolicy());
+    public static final int OUTPUT_BUFFER_SIZE = 8 * 1024;
 
-    private static boolean COLUMN_EXECUTOR_INIT = false;
+    private static ThreadPoolExecutor COLUMN_EXECUTOR;
 
-    private synchronized static void initColumnExecutor(int columnCnt) {
-        if (COLUMN_EXECUTOR_INIT) {
+    private static Thread[] COLUMN_FLUSHER;
+
+    private static int COLUMN_EXECUTOR_FLAG = 0;
+
+    private static final Object PRESENT = new Object();
+    private static final ConcurrentHashMap<LsmStorage, Object> DIRTY_LSM_STORAGE_SET = new ConcurrentHashMap<>();
+
+    private synchronized static void initColumnFlusher(int threadCnt) {
+        if (COLUMN_FLUSHER != null) {
             return;
         }
-        COLUMN_EXECUTOR.setCorePoolSize(Math.max(columnCnt, Runtime.getRuntime().availableProcessors() * 2));
-        COLUMN_EXECUTOR.setMaximumPoolSize(Math.max(columnCnt, Runtime.getRuntime().availableProcessors() * 2));
-        COLUMN_EXECUTOR_INIT = true;
+        COLUMN_FLUSHER = new Thread[threadCnt];
+        for (int i = 0; i < threadCnt; i++) {
+            COLUMN_FLUSHER[i] = new Thread(() -> {
+                while (true) {
+                    try {
+                        LsmStorage lsmStorage = DIRTY_LSM_STORAGE_SET.keySet().stream().findFirst().orElse(null);
+                        if (lsmStorage != null) {
+                            lsmStorage.flush();
+                        }
+
+                        Thread.sleep(200);
+                    } catch (Throwable throwable) {
+                        throwable.printStackTrace(System.out);
+                    }
+                }
+
+            }, "flusher-" + i);
+            COLUMN_FLUSHER[i].setDaemon(true);
+            COLUMN_FLUSHER[i].start();
+        }
+    }
+
+    private synchronized static void initColumnExecutor(int columnCnt) {
+        if (COLUMN_EXECUTOR_FLAG != 0) {
+            return;
+        }
+
+        int threadCnt = Math.max(columnCnt, Runtime.getRuntime().availableProcessors() * 2);
+
+        COLUMN_EXECUTOR = new ThreadPoolExecutor(threadCnt, threadCnt, 1L, TimeUnit.MINUTES,
+                new ArrayBlockingQueue<>(MAX_ITEM_CNT_L0), new ThreadPoolExecutor.CallerRunsPolicy());
+
+        COLUMN_EXECUTOR_FLAG = 1;
+    }
+
+    private synchronized static void shutdownColumnExecutor() {
+        if (COLUMN_EXECUTOR_FLAG != 1) {
+            return;
+        }
+        COLUMN_EXECUTOR.shutdown();
+
+        COLUMN_EXECUTOR_FLAG = 0;
     }
 
     private final File dir;
@@ -56,6 +98,7 @@ public class LsmStorage {
 
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
         initColumnExecutor(tableSchema.getColumnList().size());
+//        initColumnFlusher(tableSchema.getColumnList().size());
 
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         this.dir = new File(dbDir.getAbsolutePath(), vinStr);
@@ -128,6 +171,7 @@ public class LsmStorage {
                 throw new IllegalStateException(v.getColumnType() + "列插入失败");
             }
         });
+//        DIRTY_LSM_STORAGE_SET.put(this, PRESENT);
     }
 
     public Row agg(long l, long r, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
@@ -185,8 +229,18 @@ public class LsmStorage {
         return rowList;
     }
 
+    public void flush() throws IOException {
+        timeChannel.flush();
+
+        for (ColumnChannel columnChannel : columnChannelMap.values()) {
+            columnChannel.flush();
+        }
+    }
+
     public void shutdown() {
         try {
+            shutdownColumnExecutor();
+
             ByteBuffer allocate = ByteBuffer.allocate(8);
             allocate.putLong(latestTime);
             allocate.flip();

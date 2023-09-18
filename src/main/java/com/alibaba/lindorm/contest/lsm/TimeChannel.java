@@ -51,7 +51,7 @@ public class TimeChannel {
         if (!timeFile.exists()) {
             timeFile.createNewFile();
         }
-        timeOutput = new BufferedOutputStream(new FileOutputStream(timeFile, true));
+        timeOutput = new BufferedOutputStream(new FileOutputStream(timeFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
 
         timeInput = new RandomAccessFile(timeFile, "r");
 
@@ -61,7 +61,7 @@ public class TimeChannel {
         if (!timeIdxFile.exists()) {
             timeIdxFile.createNewFile();
         }
-        timeIndexOutput = new BufferedOutputStream(new FileOutputStream(timeIdxFile, true));
+        timeIndexOutput = new BufferedOutputStream(new FileOutputStream(timeIdxFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
         indexFileSize = timeIdxFile.length();
 
         loadAllIndexForInit();
@@ -133,6 +133,11 @@ public class TimeChannel {
         timeInput.close();
     }
 
+    public void flush() throws IOException {
+        timeOutput.flush();
+        timeIndexOutput.flush();
+    }
+
     private void index() throws IOException {
         // 输出主键稀疏索引 todo maxTime_delta, delta_bf
         TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
@@ -189,8 +194,7 @@ public class TimeChannel {
      * @throws IOException
      */
     public List<TimeItem> range(long l, long r) throws IOException {
-        timeOutput.flush();
-        timeIndexOutput.flush();
+        flush();
 
         List<TimeItem> timeItemList = new ArrayList<>();
 

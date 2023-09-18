@@ -8,6 +8,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class ColumnChannel<C extends ColumnValue> {
 
@@ -18,7 +20,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     /**
      * todo lru
      */
-    private final ThreadLocal<RandomAccessFile> columnInputThreadLocal = new ThreadLocal<>();
+    private final Map<Thread, RandomAccessFile> columnInputThreadLocal = new ConcurrentHashMap<>();
 
     public ColumnChannel(File vinDir, TableSchema.Column column) throws IOException {
         columnFile = new File(vinDir.getAbsolutePath(), column.columnName);
@@ -37,21 +39,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public void shutdown() throws IOException {
         columnOutput.flush();
         columnOutput.close();
-        clearColumnInput();
-    }
-
-    private RandomAccessFile setupColumnInput() throws FileNotFoundException {
-        RandomAccessFile randomAccessFile = new RandomAccessFile(columnFile, "r");
-        columnInputThreadLocal.set(randomAccessFile);
-        return randomAccessFile;
-    }
-
-    protected void clearColumnInput() throws IOException {
-        RandomAccessFile columnInput = columnInputThreadLocal.get();
-        if (columnInput != null) {
+        for (RandomAccessFile columnInput : columnInputThreadLocal.values()) {
             columnInput.close();
-            columnInputThreadLocal.remove();
         }
+        columnInputThreadLocal.clear();
     }
 
     /**
@@ -63,9 +54,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected ByteBuffer read(long pos, int size) throws IOException {
-        RandomAccessFile columnInput = columnInputThreadLocal.get();
+        RandomAccessFile columnInput = columnInputThreadLocal.get(Thread.currentThread());
         if (columnInput == null) {
-            columnInput = setupColumnInput();
+            columnInput = new RandomAccessFile(columnFile, "r");
+            columnInputThreadLocal.put(Thread.currentThread(), columnInput);
         }
         ByteBuffer byteBuffer = ByteBuffer.allocate(size);
         columnInput.seek(pos);

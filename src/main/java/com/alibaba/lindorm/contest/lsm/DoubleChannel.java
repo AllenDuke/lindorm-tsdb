@@ -55,9 +55,6 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 pos++;
             }
         }
-
-        clearColumnInput();
-
         return columnItemList;
     }
 
@@ -99,8 +96,6 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 pos++;
             }
         }
-
-        clearColumnInput();
 
         if (validCount == 0) {
             return new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY);

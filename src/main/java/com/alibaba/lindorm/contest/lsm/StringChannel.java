@@ -164,8 +164,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         for (Long batchNum : batchNumList) {
             columnItemList.addAll(range(batchNum, indexItemList.get(batchNum.intValue()).getPos(), indexItemList.get(batchNum.intValue()).getSize(), batchTimeItemSetMap.get(batchNum)));
         }
-
-        clearColumnInput();
         return columnItemList;
     }
 

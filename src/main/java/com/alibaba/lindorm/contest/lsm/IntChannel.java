@@ -59,7 +59,6 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
         }
 
-        clearColumnInput();
         return columnItemList;
     }
 
@@ -100,8 +99,6 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 pos++;
             }
         }
-
-        clearColumnInput();
 
         if (Aggregator.AVG.equals(aggregator)) {
             if (validCount == 0) {

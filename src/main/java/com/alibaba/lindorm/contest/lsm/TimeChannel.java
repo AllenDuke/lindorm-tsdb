@@ -6,7 +6,10 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TimeChannel {
 
@@ -40,6 +43,8 @@ public class TimeChannel {
      * 主键稀疏索引常驻内存
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
+
+    private Map<Thread, RandomAccessFile> timeInputThreadLocal = new ConcurrentHashMap<>();
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -122,6 +127,11 @@ public class TimeChannel {
 
         timeIndexOutput.flush();
         timeIndexOutput.close();
+
+        for (RandomAccessFile timeInput : timeInputThreadLocal.values()) {
+            timeInput.close();
+        }
+        timeInputThreadLocal.clear();
     }
 
     private void index() throws IOException {
@@ -183,8 +193,11 @@ public class TimeChannel {
         timeOutput.flush();
         timeIndexOutput.flush();
 
-        // todo ThreadLocal
-        RandomAccessFile timeInput = new RandomAccessFile(timeFile, "r");
+        RandomAccessFile timeInput = timeInputThreadLocal.get(Thread.currentThread());
+        if (timeInput == null) {
+            timeInput = new RandomAccessFile(timeFile, "r");
+            timeInputThreadLocal.put(Thread.currentThread(), timeInput);
+        }
 
         List<TimeItem> timeItemList = new ArrayList<>();
 
@@ -207,7 +220,6 @@ public class TimeChannel {
             }
         }
 
-        timeInput.close();
         return timeItemList;
     }
 

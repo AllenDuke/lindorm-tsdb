@@ -12,14 +12,8 @@ import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
@@ -98,6 +92,19 @@ public class TSDBEngineImpl extends TSDBEngine {
                 columnsName.add(entry.getKey());
                 columnsType.add(entry.getValue());
             }
+
+            StringBuilder stringBuilder = new StringBuilder("columnName:");
+            for (String s : columnsName) {
+                stringBuilder.append(s).append(" ");
+            }
+            System.out.println(stringBuilder);
+
+            stringBuilder.setLength(0);
+            stringBuilder.append("columnType:");
+            for (ColumnValue.ColumnType columnType : columnsType) {
+                stringBuilder.append(columnType.name()).append(" ");
+            }
+            System.out.println(stringBuilder);
 
             tableSchema = new TableSchema(columnsName, columnsType);
         } catch (Throwable throwable) {

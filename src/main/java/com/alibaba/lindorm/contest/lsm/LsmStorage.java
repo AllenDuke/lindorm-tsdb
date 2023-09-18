@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
 
 public class LsmStorage {
 
@@ -17,6 +18,20 @@ public class LsmStorage {
      * 每8k数据为一块
      */
     public static final int MAX_ITEM_CNT_L0 = 8 * 1024;
+
+    public static final ThreadPoolExecutor COLUMN_EXECUTOR = new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() * 2, 1L, TimeUnit.MINUTES, new ArrayBlockingQueue<>(MAX_ITEM_CNT_L0),
+            new ThreadPoolExecutor.CallerRunsPolicy());
+
+    private static boolean COLUMN_EXECUTOR_INIT = false;
+
+    private synchronized static void initColumnExecutor(int columnCnt) {
+        if (COLUMN_EXECUTOR_INIT) {
+            return;
+        }
+        COLUMN_EXECUTOR.setCorePoolSize(Math.max(columnCnt, Runtime.getRuntime().availableProcessors() * 2));
+        COLUMN_EXECUTOR.setMaximumPoolSize(Math.max(columnCnt, Runtime.getRuntime().availableProcessors() * 2));
+        COLUMN_EXECUTOR_INIT = true;
+    }
 
     private final File dir;
 
@@ -40,6 +55,8 @@ public class LsmStorage {
     private Row latestRow;
 
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
+        initColumnExecutor(tableSchema.getColumnList().size());
+
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
         this.dir = new File(dbDir.getAbsolutePath(), vinStr);
         if (!dir.exists()) {
@@ -136,20 +153,29 @@ public class LsmStorage {
         }
 
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
-        Map<String, List<ColumnValue>> columnValueListMap = new HashMap<>(columnChannelMap.size());
+        Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
+        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
         columnChannelMap.forEach((k, v) -> {
-            try {
-                List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
-                List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
-                for (ColumnItem<ColumnValue> columnItem : columnItemList) {
-                    columnValueList.add(columnItem.getItem());
+            COLUMN_EXECUTOR.execute(() -> {
+                try {
+                    List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
+                    List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
+                    for (ColumnItem<ColumnValue> columnItem : columnItemList) {
+                        columnValueList.add(columnItem.getItem());
+                    }
+                    columnValueListMap.put(k, columnValueList);
+                    countDownLatch.countDown();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException(k + "列查询失败");
                 }
-                columnValueListMap.put(k, columnValueList);
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new IllegalStateException(k + "列查询失败");
-            }
+            });
         });
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         for (int i = 0; i < timeRange.size(); i++) {
             Map<String, ColumnValue> columnValueMap = new HashMap<>(columnValueListMap.size());
             int finalI = i;
@@ -171,6 +197,8 @@ public class LsmStorage {
             for (ColumnChannel columnChannel : columnChannelMap.values()) {
                 columnChannel.shutdown();
             }
+
+            COLUMN_EXECUTOR.shutdown();
         } catch (IOException ioException) {
             ioException.printStackTrace();
             throw new IllegalStateException("LsmStorage shutdown failed.");

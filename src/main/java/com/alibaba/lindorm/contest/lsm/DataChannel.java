@@ -14,20 +14,22 @@ public class DataChannel {
 
     private ByteBuffer lastBuffer;
 
-    private final boolean useNio;
+    private final int ioMode;
 
-    public DataChannel(File dataFile, boolean useNio, int nioBuffersSize, int bioBufferSize) throws FileNotFoundException {
-        this.useNio = useNio;
-        if (useNio) {
+    public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws FileNotFoundException {
+        this.ioMode = ioMode;
+        if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
             lastBuffer = ByteBuffer.allocateDirect(nioBuffersSize);
-        } else {
+        } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);
+        } else {
+            outputBio = new FileOutputStream(dataFile, true);
         }
     }
 
     public void writeLong(long l) throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             if (lastBuffer.capacity() < 8) {
                 lastBuffer = ByteBuffer.allocateDirect(8);
             }
@@ -41,7 +43,7 @@ public class DataChannel {
     }
 
     public void writeInt(int i) throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             if (lastBuffer.capacity() < 4) {
                 lastBuffer = ByteBuffer.allocateDirect(4);
             }
@@ -55,7 +57,7 @@ public class DataChannel {
     }
 
     public void writeDouble(double d) throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             if (lastBuffer.capacity() < 8) {
                 lastBuffer = ByteBuffer.allocateDirect(8);
             }
@@ -69,7 +71,7 @@ public class DataChannel {
     }
 
     public void writeString(ByteBuffer buffer) throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             lastBuffer.clear();
             lastBuffer.putInt(buffer.limit());
             lastBuffer.flip();
@@ -81,7 +83,7 @@ public class DataChannel {
     }
 
     public void flush() throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             outputNio.force(true);
         } else {
             outputBio.flush();
@@ -89,7 +91,7 @@ public class DataChannel {
     }
 
     public void close() throws IOException {
-        if (useNio) {
+        if (ioMode == 2) {
             outputNio.close();
         } else {
             outputBio.close();

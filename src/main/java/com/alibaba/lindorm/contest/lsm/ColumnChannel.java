@@ -27,7 +27,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         if (!columnFile.exists()) {
             columnFile.createNewFile();
         }
-        columnOutput = new DataChannel(columnFile, LsmStorage.USE_NIO, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+        columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
         columnInput = new RandomAccessFile(columnFile, "r");
     }
 

@@ -1,4 +1,4 @@
 --add-opens java.base/jdk.internal.misc=ALL-UNNAMED
--Xmx5g
--Xms5g
--XX:MaxDirectMemorySize=1024M
+-Xmx3g
+-Xms3g
+-XX:MaxDirectMemorySize=16M

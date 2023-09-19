@@ -97,7 +97,7 @@ public class LsmStorage {
     private Row latestRow;
 
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
-        initColumnExecutor(tableSchema.getColumnList().size());
+//        initColumnExecutor(tableSchema.getColumnList().size());
 //        initColumnFlusher(tableSchema.getColumnList().size());
 
         String vinStr = new String(vin.getVin(), StandardCharsets.UTF_8);
@@ -198,28 +198,28 @@ public class LsmStorage {
 
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
         Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
-        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
+//        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
         columnChannelMap.forEach((k, v) -> {
-            COLUMN_EXECUTOR.execute(() -> {
-                try {
-                    List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
-                    List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
-                    for (ColumnItem<ColumnValue> columnItem : columnItemList) {
-                        columnValueList.add(columnItem.getItem());
-                    }
-                    columnValueListMap.put(k, columnValueList);
-                    countDownLatch.countDown();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new IllegalStateException(k + "列查询失败");
+//            COLUMN_EXECUTOR.execute(() -> {
+            try {
+                List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
+                List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
+                for (ColumnItem<ColumnValue> columnItem : columnItemList) {
+                    columnValueList.add(columnItem.getItem());
                 }
-            });
+                columnValueListMap.put(k, columnValueList);
+//                countDownLatch.countDown();
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new IllegalStateException(k + "列查询失败");
+            }
+//            });
         });
-        try {
-            countDownLatch.await();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+//        try {
+//            countDownLatch.await();
+//        } catch (InterruptedException e) {
+//            throw new RuntimeException(e);
+//        }
         for (int i = 0; i < timeRange.size(); i++) {
             Map<String, ColumnValue> columnValueMap = new HashMap<>(columnValueListMap.size());
             int finalI = i;
@@ -252,7 +252,7 @@ public class LsmStorage {
                 columnChannel.shutdown();
             }
 
-            COLUMN_EXECUTOR.shutdown();
+//            COLUMN_EXECUTOR.shutdown();
         } catch (IOException ioException) {
             ioException.printStackTrace();
             throw new IllegalStateException("LsmStorage shutdown failed.");

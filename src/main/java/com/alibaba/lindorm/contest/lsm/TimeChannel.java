@@ -17,7 +17,7 @@ public class TimeChannel {
 
     private static final int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
 
-    private final OutputStream timeOutput;
+    private final DataChannel timeOutput;
 
     private final File timeFile;
 
@@ -44,15 +44,15 @@ public class TimeChannel {
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
 
-    private RandomAccessFile timeInput;
+    private final RandomAccessFile timeInput;
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
         if (!timeFile.exists()) {
             timeFile.createNewFile();
         }
-        timeOutput = new BufferedOutputStream(new FileOutputStream(timeFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
 
+        timeOutput = new DataChannel(timeFile, LsmStorage.USE_NIO, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
         timeInput = new RandomAccessFile(timeFile, "r");
 
         vinStr = vinDir.getName();
@@ -93,14 +93,18 @@ public class TimeChannel {
             minTime = time;
             maxTime = time;
             lastTime = time;
-            CommonUtils.writeLong(timeOutput, time);
+
+            timeOutput.writeLong(time);
+
             batchItemCount++;
             return;
         }
         minTime = Math.min(minTime, time);
         maxTime = Math.max(maxTime, time);
+
         // todo 变长编码
-        CommonUtils.writeInt(timeOutput, (int) (time - lastTime));
+        timeOutput.writeInt((int) (time - lastTime));
+
         lastTime = time;
         batchItemCount++;
         checkAndIndex();

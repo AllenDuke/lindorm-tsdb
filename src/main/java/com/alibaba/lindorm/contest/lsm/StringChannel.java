@@ -59,7 +59,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     public void append(ColumnValue.StringColumn stringColumn) throws IOException {
         // todo 批压缩
-        CommonUtils.writeString(columnOutput, stringColumn.getStringValue());
+        columnOutput.writeString(stringColumn.getStringValue());
         batchItemCount++;
         batchSize += 4 + stringColumn.getStringValue().limit();
 

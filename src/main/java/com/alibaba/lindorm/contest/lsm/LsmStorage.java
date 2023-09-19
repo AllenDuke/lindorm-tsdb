@@ -11,6 +11,8 @@ import java.util.concurrent.*;
 
 public class LsmStorage {
 
+    public static final boolean USE_NIO = false;
+
     /**
      * 每8k数据为一块
      */

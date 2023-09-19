@@ -21,7 +21,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     public void append(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
-        CommonUtils.writeDouble(columnOutput, doubleFloatColumn.getDoubleFloatValue());
+        columnOutput.writeDouble(doubleFloatColumn.getDoubleFloatValue());
     }
 
     @Override

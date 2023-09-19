@@ -24,7 +24,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public void append(ColumnValue.IntegerColumn integerColumn) throws IOException {
-        CommonUtils.writeInt(columnOutput, integerColumn.getIntegerValue());
+        columnOutput.writeInt(integerColumn.getIntegerValue());
     }
 
     @Override

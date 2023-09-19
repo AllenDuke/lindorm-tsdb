@@ -199,7 +199,6 @@ public class TimeChannel {
      */
     public List<TimeItem> range(long l, long r) throws IOException {
         flush();
-        timeInput = new RandomAccessFile(timeFile, "r");
 
         List<TimeItem> timeItemList = new ArrayList<>();
 

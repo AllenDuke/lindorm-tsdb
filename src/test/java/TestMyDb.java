@@ -76,8 +76,8 @@ public class TestMyDb {
 
 
             Map<String, ColumnValue.ColumnType> cols = new HashMap<>();
-//            cols.put("col1", ColumnValue.ColumnType.COLUMN_TYPE_INTEGER);
-//            cols.put("col2", ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT);
+            cols.put("col1", ColumnValue.ColumnType.COLUMN_TYPE_INTEGER);
+            cols.put("col2", ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT);
             cols.put("col3", ColumnValue.ColumnType.COLUMN_TYPE_STRING);
             Schema schema = new Schema(cols);
 
@@ -90,8 +90,8 @@ public class TestMyDb {
                 rowList.clear();
 
                 columns = new HashMap<>();
-//                columns.put("col1", new ColumnValue.IntegerColumn(i));
-//                columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i) * 0.1));
+                columns.put("col1", new ColumnValue.IntegerColumn(i));
+                columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i) * 0.1));
                 columns.put("col3", new ColumnValue.StringColumn(buffer));
                 rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
 

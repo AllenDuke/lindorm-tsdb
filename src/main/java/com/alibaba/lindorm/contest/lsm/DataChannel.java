@@ -23,7 +23,8 @@ public class DataChannel {
         this.ioMode = ioMode;
         if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
-            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 16 * 1024));
+            // 5000个vin 60+1列，这里需要2.5GB
+            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 8 * 1024));
         } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);
         } else {

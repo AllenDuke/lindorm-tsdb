@@ -11,7 +11,7 @@ import java.util.concurrent.*;
 
 public class LsmStorage {
 
-    public static final int IO_MODE = 1;
+    public static final int IO_MODE = 2;
 
     /**
      * 每8k数据为一块
@@ -165,14 +165,24 @@ public class LsmStorage {
         }
         latestTime = Math.max(row.getTimestamp(), latestTime);
         timeChannel.append(row.getTimestamp());
+//        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
         row.getColumns().forEach((k, v) -> {
-            try {
-                columnChannelMap.get(k).append(v);
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new IllegalStateException(v.getColumnType() + "列插入失败");
-            }
+//            COLUMN_EXECUTOR.execute(() -> {
+                try {
+                    columnChannelMap.get(k).append(v);
+//                    countDownLatch.countDown();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException(v.getColumnType() + "列插入失败");
+                }
+//            });
         });
+//        try {
+//            countDownLatch.await();
+//        } catch (InterruptedException e) {
+//            throw new RuntimeException(e);
+//        }
+
 //        DIRTY_LSM_STORAGE_SET.put(this, PRESENT);
     }
 

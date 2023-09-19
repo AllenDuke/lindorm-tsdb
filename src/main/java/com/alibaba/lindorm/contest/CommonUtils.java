@@ -9,8 +9,8 @@ import java.util.zip.GZIPOutputStream;
 
 public class CommonUtils {
     // Add "--add-opens java.base/jdk.internal.misc=ALL-UNNAMED" to your VM properties to enable unsafe.
-    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
-    private static final long ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
+    public static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    public static final long ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
 
     public static void writeLong(OutputStream out, long v) throws IOException {
         byte[] b = new byte[8];

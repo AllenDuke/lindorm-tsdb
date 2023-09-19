@@ -64,10 +64,11 @@ public class TestMyDb {
             tsdbEngineSample.connect();
 
             Map<String, ColumnValue> columns = new HashMap<>();
-            ByteBuffer buffer = ByteBuffer.allocate(3);
-            buffer.put((byte) 70);
-            buffer.put((byte) 71);
-            buffer.put((byte) 72);
+            int bufferSize = 3;
+            ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+            for (int i = 0; i < bufferSize; i++) {
+                buffer.put((byte) 'h');
+            }
             buffer.flip();
             columns.put("col1", new ColumnValue.IntegerColumn(123));
             columns.put("col2", new ColumnValue.DoubleFloatColumn(1.23));
@@ -75,8 +76,8 @@ public class TestMyDb {
 
 
             Map<String, ColumnValue.ColumnType> cols = new HashMap<>();
-            cols.put("col1", ColumnValue.ColumnType.COLUMN_TYPE_INTEGER);
-            cols.put("col2", ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT);
+//            cols.put("col1", ColumnValue.ColumnType.COLUMN_TYPE_INTEGER);
+//            cols.put("col2", ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT);
             cols.put("col3", ColumnValue.ColumnType.COLUMN_TYPE_STRING);
             Schema schema = new Schema(cols);
 
@@ -85,12 +86,12 @@ public class TestMyDb {
             long begin = System.currentTimeMillis();
 
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 40000000; i++) {
+            for (int i = 0; i < 1000000; i++) {
                 rowList.clear();
 
                 columns = new HashMap<>();
-                columns.put("col1", new ColumnValue.IntegerColumn(i));
-                columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i) * 0.1));
+//                columns.put("col1", new ColumnValue.IntegerColumn(i));
+//                columns.put("col2", new ColumnValue.DoubleFloatColumn(-(UTC + i) * 0.1));
                 columns.put("col3", new ColumnValue.StringColumn(buffer));
                 rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
 

@@ -6,6 +6,9 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
+import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
+import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
+
 public class DataChannel {
 
     private FileChannel outputNio;
@@ -20,7 +23,7 @@ public class DataChannel {
         this.ioMode = ioMode;
         if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
-            lastBuffer = ByteBuffer.allocateDirect(nioBuffersSize);
+            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 16 * 1024));
         } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);
         } else {
@@ -28,15 +31,50 @@ public class DataChannel {
         }
     }
 
+    private void nioFlushBuffer() throws IOException {
+        lastBuffer.flip();
+        int written = 0;
+        while (written < lastBuffer.limit()) {
+            written += outputNio.write(lastBuffer);
+        }
+        lastBuffer.clear();
+    }
+
+    private void nioCheckAndFlushBuffer() throws IOException {
+        if (lastBuffer.position() < lastBuffer.limit()) {
+            // 1024字节对齐写入效率更高
+            return;
+        }
+
+        nioFlushBuffer();
+    }
+
+    private void writeBytes(byte[] b, int pos) throws IOException {
+        if (ioMode == 2) {
+            if (pos >= b.length) {
+                return;
+            }
+            while (lastBuffer.hasRemaining() && pos < b.length) {
+                lastBuffer.put(b[pos++]);
+            }
+            nioCheckAndFlushBuffer();
+            // todo b太大可能会栈溢出，递归优化
+            writeBytes(b, pos);
+        } else {
+            outputBio.write(b);
+        }
+    }
+
     public void writeLong(long l) throws IOException {
         if (ioMode == 2) {
-            if (lastBuffer.capacity() < 8) {
-                lastBuffer = ByteBuffer.allocateDirect(8);
+            if (lastBuffer.remaining() >= 8) {
+                lastBuffer.putLong(l);
+            } else {
+                byte[] b = new byte[8];
+                UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET, l, true);
+                writeBytes(b, 0);
             }
-            lastBuffer.clear();
-            lastBuffer.putLong(l);
-            lastBuffer.flip();
-            outputNio.write(lastBuffer);
+            nioCheckAndFlushBuffer();
         } else {
             CommonUtils.writeLong(outputBio, l);
         }
@@ -44,13 +82,14 @@ public class DataChannel {
 
     public void writeInt(int i) throws IOException {
         if (ioMode == 2) {
-            if (lastBuffer.capacity() < 4) {
-                lastBuffer = ByteBuffer.allocateDirect(4);
+            if (lastBuffer.remaining() >= 4) {
+                lastBuffer.putInt(i);
+            } else {
+                byte[] b = new byte[4];
+                UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, i, true);
+                writeBytes(b, 0);
             }
-            lastBuffer.clear();
-            lastBuffer.putInt(i);
-            lastBuffer.flip();
-            outputNio.write(lastBuffer);
+            nioCheckAndFlushBuffer();
         } else {
             CommonUtils.writeInt(outputBio, i);
         }
@@ -58,13 +97,12 @@ public class DataChannel {
 
     public void writeDouble(double d) throws IOException {
         if (ioMode == 2) {
-            if (lastBuffer.capacity() < 8) {
-                lastBuffer = ByteBuffer.allocateDirect(8);
+            if (lastBuffer.remaining() >= 8) {
+                lastBuffer.putDouble(d);
+            } else {
+                writeLong(Double.doubleToLongBits(d));
             }
-            lastBuffer.clear();
-            lastBuffer.putDouble(d);
-            lastBuffer.flip();
-            outputNio.write(lastBuffer);
+            nioCheckAndFlushBuffer();
         } else {
             CommonUtils.writeDouble(outputBio, d);
         }
@@ -72,11 +110,8 @@ public class DataChannel {
 
     public void writeString(ByteBuffer buffer) throws IOException {
         if (ioMode == 2) {
-            lastBuffer.clear();
-            lastBuffer.putInt(buffer.limit());
-            lastBuffer.flip();
-            outputNio.write(lastBuffer);
-            outputNio.write(buffer);
+            writeInt(buffer.limit());
+            writeBytes(buffer.array(), 0);
         } else {
             CommonUtils.writeString(outputBio, buffer);
         }
@@ -84,6 +119,7 @@ public class DataChannel {
 
     public void flush() throws IOException {
         if (ioMode == 2) {
+            nioFlushBuffer();
             outputNio.force(true);
         } else {
             outputBio.flush();

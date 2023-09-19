@@ -44,7 +44,7 @@ public class TimeChannel {
      */
     private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
 
-    private final RandomAccessFile timeInput;
+    private RandomAccessFile timeInput;
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -199,6 +199,7 @@ public class TimeChannel {
      */
     public List<TimeItem> range(long l, long r) throws IOException {
         flush();
+        timeInput = new RandomAccessFile(timeFile, "r");
 
         List<TimeItem> timeItemList = new ArrayList<>();
 

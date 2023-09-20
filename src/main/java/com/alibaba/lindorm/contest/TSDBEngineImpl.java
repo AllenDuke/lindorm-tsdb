@@ -14,6 +14,8 @@ import com.alibaba.lindorm.contest.structs.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
@@ -60,7 +62,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             System.out.println("flusher out");
         }, "flusher");
         flusher.setDaemon(true);
-        flusher.start();
+//        flusher.start();
     }
 
 
@@ -157,18 +159,26 @@ public class TSDBEngineImpl extends TSDBEngine {
                 return;
             }
 
-            long timeIndexFileSize = 0;
+            AtomicLong timeIndexFileSize = new AtomicLong(0);
+            CountDownLatch countDownLatch = new CountDownLatch(LSM_STORAGES.size());
+            ThreadPoolExecutor shutdownExecutor = new ThreadPoolExecutor(100, 100, 3L, TimeUnit.SECONDS,
+                    new ArrayBlockingQueue<>(10000), new ThreadPoolExecutor.CallerRunsPolicy());
             for (LsmStorage lsmStorage : LSM_STORAGES.values()) {
-                ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantReadWriteLock());
-                lock.writeLock().lock();
-                timeIndexFileSize += lsmStorage.getTimeIndexFileSize();
-                lsmStorage.shutdown();
-                lock.writeLock().unlock();
+                shutdownExecutor.execute(() -> {
+                    ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantReadWriteLock());
+                    lock.writeLock().lock();
+                    timeIndexFileSize.getAndAdd(lsmStorage.getTimeIndexFileSize());
+                    lsmStorage.shutdown();
+                    lock.writeLock().unlock();
+                    countDownLatch.countDown();
+                });
             }
+            shutdownExecutor.shutdown();
+            countDownLatch.await();
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
 
-            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize + "B");
+            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get() + "B");
 
             // Persist the schema.
             try {
@@ -190,7 +200,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         } catch (Throwable throwable) {
             System.out.println("shutdown failed.");
             throwable.printStackTrace(System.out);
-            throw throwable;
+            throw new RuntimeException(throwable);
         }
     }
 

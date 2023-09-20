@@ -227,10 +227,13 @@ public class TimeChannel {
     private List<TimeItem> range(long l, long r, int batchNum, RandomAccessFile timeInput) throws IOException {
         List<TimeItem> timeItemList = new ArrayList<>();
 
-        ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
-        timeInput.seek((long) batchNum * FULL_BATCH_SIZE);
-        int read = timeInput.read(byteBuffer.array());
-        byteBuffer.limit(read);
+//        ByteBuffer byteBuffer = ByteBuffer.allocate(FULL_BATCH_SIZE);
+//        timeInput.seek((long) batchNum * FULL_BATCH_SIZE);
+//        int read = timeInput.read(byteBuffer.array());
+//        byteBuffer.limit(read);
+
+        ByteBuffer byteBuffer = timeOutput.read((long) batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+
         int pos = 0;
         long last = byteBuffer.getLong();
         if (last >= l && last < r) {

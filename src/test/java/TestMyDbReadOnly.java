@@ -51,9 +51,11 @@ public class TestMyDbReadOnly {
             ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
             showResult(resultSet);
 
+            long begin = System.currentTimeMillis();
+
             resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
-                    TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.MAX, TestMyDb.ITEM_CNT / 10,
+                    TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.AVG, TestMyDb.ITEM_CNT / 10,
                     new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
             showResult(resultSet);
 
@@ -62,6 +64,8 @@ public class TestMyDbReadOnly {
                     TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.MAX, TestMyDb.ITEM_CNT / 10,
                     new CompareExpression(new ColumnValue.DoubleFloatColumn(TestMyDb.UTC), CompareExpression.CompareOp.EQUAL)));
             showResult(resultSet);
+
+            System.out.println((System.currentTimeMillis() - begin));
 
             tsdbEngineSample.shutdown();
         } catch (IOException e) {

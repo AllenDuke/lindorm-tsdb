@@ -40,7 +40,7 @@ public class TestMyDb {
 
     public static final long UTC = Date.UTC(1970, Calendar.FEBRUARY, 1, 0, 0, 0);
 
-    public static final int ITEM_CNT = 10000000;
+    public static final int ITEM_CNT = 40000000;
 
     public static void main(String[] args) {
         File dataDir = new File("data_dir");
@@ -86,7 +86,7 @@ public class TestMyDb {
             long begin = System.currentTimeMillis();
 
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 80000000; i++) {
+            for (int i = 0; i < ITEM_CNT; i++) {
                 rowList.clear();
 
                 columns = new HashMap<>();

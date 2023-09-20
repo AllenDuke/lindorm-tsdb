@@ -15,14 +15,28 @@ public class DataChannel {
 
     private OutputStream outputBio;
 
+    private InputStream inputBioStream;
+    private RandomAccessFile inputRandomAccessFile;
+
+    private FileChannel inputNio;
+
+    private long inputBioPos;
+
     private ByteBuffer lastBuffer;
 
     private final int ioMode;
 
+    private final File dataFile;
+
     public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws FileNotFoundException {
         this.ioMode = ioMode;
+        this.dataFile = dataFile;
         if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
+//            inputNio = new FileInputStream(dataFile).getChannel();
+//            inputBioStream = new FileInputStream(dataFile);
+            inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
+
             // 5000个vin 60+1列，这里需要2.5GB
             lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 16 * 1024));
         } else if (this.ioMode == 1) {
@@ -130,8 +144,38 @@ public class DataChannel {
     public void close() throws IOException {
         if (ioMode == 2) {
             outputNio.close();
+//            inputNio.close();
+//            inputBioStream.close();
+            inputRandomAccessFile.close();
         } else {
             outputBio.close();
         }
     }
+
+    protected ByteBuffer read(long pos, int size) throws IOException {
+//        if (ioMode == 2) {
+//            return inputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
+//        } else {
+//        if (inputBioPos != pos) {
+//            inputBioStream.close();
+//            inputBioStream = new FileInputStream(dataFile);
+//            inputBioStream.skip(pos);
+//            inputBioPos = pos;
+//        }
+//        byte[] bytes = inputBioStream.readNBytes(size);
+//        inputBioPos += bytes.length;
+//        return ByteBuffer.wrap(bytes);
+
+        if (inputBioPos != pos) {
+            inputRandomAccessFile.seek(pos);
+            inputBioPos = pos;
+        }
+
+        ByteBuffer allocate = ByteBuffer.allocate(size);
+        int read = inputRandomAccessFile.read(allocate.array());
+        allocate.limit(read);
+        inputBioPos += read;
+        return allocate;
+    }
+//    }
 }

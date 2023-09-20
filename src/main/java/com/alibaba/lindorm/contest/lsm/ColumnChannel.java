@@ -57,10 +57,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected ByteBuffer read(long pos, int size) throws IOException {
-        ByteBuffer byteBuffer = ByteBuffer.allocate(size);
-        columnInput.seek(pos);
-        int read = columnInput.read(byteBuffer.array());
-        byteBuffer.limit(read);
-        return byteBuffer;
+        return columnOutput.read(pos, size);
     }
 }

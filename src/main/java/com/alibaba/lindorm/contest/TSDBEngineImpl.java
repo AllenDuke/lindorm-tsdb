@@ -24,11 +24,45 @@ public class TSDBEngineImpl extends TSDBEngine {
 
     private static final ConcurrentMap<Vin, ReentrantReadWriteLock> VIN_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Vin, LsmStorage> LSM_STORAGES = new ConcurrentHashMap<>();
-    private boolean connected = false;
+    private volatile boolean connected = false;
     private int columnsNum;
     private ArrayList<String> columnsName;
     private ArrayList<ColumnValue.ColumnType> columnsType;
     private TableSchema tableSchema;
+
+    private Thread flusher;
+
+    private void initFlusher() {
+        flusher = new Thread(() -> {
+            while (connected) {
+                try {
+                    Thread.sleep(3000);
+                    for (Vin vin : VIN_LOCKS.keySet()) {
+                        LsmStorage lsmStorage = LSM_STORAGES.get(vin);
+                        if (lsmStorage == null) {
+                            continue;
+                        }
+                        ReentrantReadWriteLock lock = VIN_LOCKS.get(vin);
+                        if (lock == null) {
+                            continue;
+                        }
+                        lock.writeLock().lock();
+                        try {
+                            lsmStorage.flush();
+                        } finally {
+                            lock.writeLock().unlock();
+                        }
+                    }
+                } catch (Throwable throwable) {
+                    throwable.printStackTrace(System.out);
+                }
+            }
+            System.out.println("flusher out");
+        }, "flusher");
+        flusher.setDaemon(true);
+        flusher.start();
+    }
+
 
     /**
      * This constructor's function signature should not be modified.
@@ -49,6 +83,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             if (!schemaFile.exists() || !schemaFile.isFile()) {
                 System.out.println("Connect new database with empty pre-written data");
                 connected = true;
+                initFlusher();
                 return;
             }
             try (BufferedReader reader = new BufferedReader(new FileReader(schemaFile))) {
@@ -71,6 +106,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
             tableSchema = new TableSchema(columnsName, columnsType);
             connected = true;
+            initFlusher();
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             System.out.println("connect failed.");
@@ -215,24 +251,14 @@ public class TSDBEngineImpl extends TSDBEngine {
     @Override
     public ArrayList<Row> executeTimeRangeQuery(TimeRangeQueryRequest trReadReq) throws IOException {
         try {
-            Set<Row> ans = new HashSet<>();
             Vin vin = trReadReq.getVin();
             ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
             lock.writeLock().lock();
 
             LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
-            List<Row> range = lsmStorage.range(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound());
-            for (Row row : range) {
-                Map<String, ColumnValue> filteredColumns = new HashMap<>();
-                Map<String, ColumnValue> columns = row.getColumns();
-
-                for (String key : trReadReq.getRequestedColumns())
-                    filteredColumns.put(key, columns.get(key));
-                ans.add(new Row(vin, row.getTimestamp(), filteredColumns));
-            }
-
+            ArrayList<Row> range = lsmStorage.range(trReadReq.getTimeLowerBound(), trReadReq.getTimeUpperBound(), trReadReq.getRequestedColumns());
             lock.writeLock().unlock();
-            return new ArrayList<>(ans);
+            return range;
         } catch (Throwable throwable) {
             System.out.println("executeTimeRangeQuery failed, l:" + trReadReq.getTimeLowerBound() + ", r:" + trReadReq.getTimeUpperBound());
             throwable.printStackTrace(System.out);

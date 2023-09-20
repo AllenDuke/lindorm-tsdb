@@ -86,7 +86,7 @@ public class TestMyDb {
             long begin = System.currentTimeMillis();
 
             ArrayList<Row> rowList = new ArrayList<>();
-            for (int i = 0; i < 1000000; i++) {
+            for (int i = 0; i < 80000000; i++) {
                 rowList.clear();
 
                 columns = new HashMap<>();

@@ -22,38 +22,7 @@ public class LsmStorage {
 
     private static ThreadPoolExecutor COLUMN_EXECUTOR;
 
-    private static Thread[] COLUMN_FLUSHER;
-
     private static int COLUMN_EXECUTOR_FLAG = 0;
-
-    private static final Object PRESENT = new Object();
-    private static final ConcurrentHashMap<LsmStorage, Object> DIRTY_LSM_STORAGE_SET = new ConcurrentHashMap<>();
-
-    private synchronized static void initColumnFlusher(int threadCnt) {
-        if (COLUMN_FLUSHER != null) {
-            return;
-        }
-        COLUMN_FLUSHER = new Thread[threadCnt];
-        for (int i = 0; i < threadCnt; i++) {
-            COLUMN_FLUSHER[i] = new Thread(() -> {
-                while (true) {
-                    try {
-                        LsmStorage lsmStorage = DIRTY_LSM_STORAGE_SET.keySet().stream().findFirst().orElse(null);
-                        if (lsmStorage != null) {
-                            lsmStorage.flush();
-                        }
-
-                        Thread.sleep(200);
-                    } catch (Throwable throwable) {
-                        throwable.printStackTrace(System.out);
-                    }
-                }
-
-            }, "flusher-" + i);
-            COLUMN_FLUSHER[i].setDaemon(true);
-            COLUMN_FLUSHER[i].start();
-        }
-    }
 
     private synchronized static void initColumnExecutor(int columnCnt) {
         if (COLUMN_EXECUTOR_FLAG != 0) {
@@ -168,13 +137,13 @@ public class LsmStorage {
 //        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
         row.getColumns().forEach((k, v) -> {
 //            COLUMN_EXECUTOR.execute(() -> {
-                try {
-                    columnChannelMap.get(k).append(v);
+            try {
+                columnChannelMap.get(k).append(v);
 //                    countDownLatch.countDown();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new IllegalStateException(v.getColumnType() + "列插入失败");
-                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new IllegalStateException(v.getColumnType() + "列插入失败");
+            }
 //            });
         });
 //        try {
@@ -202,7 +171,7 @@ public class LsmStorage {
         return new Row(vin, l, columnValueMap);
     }
 
-    public List<Row> range(long l, long r) throws IOException {
+    public ArrayList<Row> range(long l, long r, Set<String> requestedColumnSet) throws IOException {
         List<TimeItem> timeRange = timeChannel.range(l, r);
         if (timeRange.isEmpty()) {
             return new ArrayList<>(0);
@@ -211,22 +180,23 @@ public class LsmStorage {
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
         Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
 //        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
-        columnChannelMap.forEach((k, v) -> {
+        for (String columnName : requestedColumnSet) {
+            ColumnChannel columnChannel = columnChannelMap.get(columnName);
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                List<ColumnItem<ColumnValue>> columnItemList = v.range(timeRange);
+                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange);
                 List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
                 for (ColumnItem<ColumnValue> columnItem : columnItemList) {
                     columnValueList.add(columnItem.getItem());
                 }
-                columnValueListMap.put(k, columnValueList);
+                columnValueListMap.put(columnName, columnValueList);
 //                countDownLatch.countDown();
             } catch (IOException e) {
                 e.printStackTrace();
-                throw new IllegalStateException(k + "列查询失败");
+                throw new IllegalStateException(columnName + "列查询失败");
             }
 //            });
-        });
+        }
 //        try {
 //            countDownLatch.await();
 //        } catch (InterruptedException e) {
@@ -283,7 +253,7 @@ public class LsmStorage {
         if (latestRow != null) {
             return latestRow;
         }
-        List<Row> rowList = range(latestTime, latestTime + 1);
+        List<Row> rowList = range(latestTime, latestTime + 1, columnChannelMap.keySet());
         if (rowList != null && rowList.size() > 0) {
             latestRow = rowList.get(0);
         }

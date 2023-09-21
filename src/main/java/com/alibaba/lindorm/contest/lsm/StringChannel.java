@@ -64,7 +64,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
-    public ColumnValue.StringColumn agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+    public ColumnValue.StringColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
         throw new IllegalStateException("string类型不支持聚合");
 //        Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
 //        for (TimeItem timeItem : timeItemList) {

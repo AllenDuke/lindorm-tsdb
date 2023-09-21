@@ -81,7 +81,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList) throws IOException;
 
-    public abstract ColumnValue agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException;
+    public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException;
 
     public void shutdown() throws IOException {
         if (batchItemCount > 0) {

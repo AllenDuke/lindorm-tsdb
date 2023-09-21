@@ -8,6 +8,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 public class LsmStorage {
 
@@ -167,8 +168,9 @@ public class LsmStorage {
         if (timeRange.isEmpty()) {
             return null;
         }
+        List<TimeItem> batch = timeRange.stream().filter(timeItem -> timeItem.getTime() == 0).collect(Collectors.toList());
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
-        ColumnValue agg = columnChannel.agg(timeRange, aggregator, columnFilter);
+        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter);
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
         return new Row(vin, l, columnValueMap);

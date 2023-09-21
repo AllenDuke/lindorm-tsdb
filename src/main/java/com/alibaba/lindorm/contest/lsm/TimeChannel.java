@@ -204,9 +204,7 @@ public class TimeChannel {
             // 需要扫描这一批次
             if (minTime >= l && maxTime < r) {
                 // 这一完整批次符合条件，但因为是agg，所以不需要扫描数据文件，在内存中生成
-                for (int itemNum = 0; itemNum < LsmStorage.MAX_ITEM_CNT_L0; itemNum++) {
-                    timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * i + itemNum));
-                }
+                timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * i));
             } else {
                 if (!flushed) {
                     flush();
@@ -222,9 +220,7 @@ public class TimeChannel {
                 // 需要扫描这一批次
                 if (minTime >= l && maxTime < r) {
                     // 这一完整批次符合条件，但因为是agg，所以不需要扫描数据文件，在内存中生成
-                    for (int itemNum = 0; itemNum < batchItemCount; itemNum++) {
-                        timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * indexItemCount + itemNum));
-                    }
+                    timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * indexItemCount));
                 } else {
                     if (!flushed) {
                         flush();

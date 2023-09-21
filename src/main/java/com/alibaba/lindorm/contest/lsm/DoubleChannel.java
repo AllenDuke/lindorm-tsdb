@@ -150,9 +150,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     @Override
-    public ColumnValue.DoubleFloatColumn agg(List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
-        super.flush();
-
+    public ColumnValue.DoubleFloatColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
         double sum = 0.0;
         double max = -Double.MAX_VALUE;
         int validCount = 0;
@@ -161,6 +159,21 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         for (TimeItem timeItem : timeItemList) {
             Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
             timeItemSet.add(timeItem.getItemNum());
+        }
+
+        if (!batchTimeItemSetMap.isEmpty()) {
+            // 需要扫描数据列
+            super.flush();
+        }
+
+        if (columnFilter == null && !batchItemList.isEmpty()) {
+            // 通过索引处理
+            Map<Integer, DoubleIndexItem> indexItemMap = loadAllIndex().stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
+            for (TimeItem item : batchItemList) {
+                DoubleIndexItem doubleIndexItem = indexItemMap.get((int) item.getBatchNum());
+                sum += doubleIndexItem.getBatchSum();
+                max = Math.max(max, doubleIndexItem.getBatchMax());
+            }
         }
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());

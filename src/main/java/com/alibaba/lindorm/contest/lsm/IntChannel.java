@@ -18,6 +18,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private static final int TMP_IDX_SIZE = 4 + 4 + 8 + 4;
 
+    private static final int IDX_SIZE = 8 + 4;
+
     private long batchSum;
 
     private int batchMax = Integer.MIN_VALUE;
@@ -66,6 +68,41 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected int batchGrow(ColumnValue.IntegerColumn integerColumn) throws IOException {
         return 4;
+    }
+
+    @Override
+    protected List<IntIndexItem> loadAllIndex() throws IOException {
+        FileInputStream fileInputStream = new FileInputStream(indexFile);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
+        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
+            throw new IllegalStateException("稀疏索引文件损坏");
+        }
+        fileInputStream.close();
+
+        if (byteBuffer.limit() % IDX_SIZE != 0) {
+            throw new IllegalStateException("稀疏索引文件损坏");
+        }
+        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
+        List<IntIndexItem> indexItemList = new ArrayList<>(indexItemCount);
+
+        if (indexItemCount > 0) {
+            indexItemList.add(new IntIndexItem(0, 0, FULL_BATCH_SIZE, byteBuffer.getLong(), byteBuffer.getInt()));
+        }
+
+        for (int i = 1; i < indexItemCount; i++) {
+            IntIndexItem indexItem = indexItemList.get(i - 1);
+            indexItemList.add(new IntIndexItem(i, indexItem.getPos() + indexItem.getSize(), FULL_BATCH_SIZE, byteBuffer.getLong(), byteBuffer.getInt()));
+        }
+
+        if (batchItemCount > 0) {
+            if (indexItemCount > 0) {
+                IntIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+                indexItemList.add(new IntIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize, batchSum, batchMax));
+            } else {
+                indexItemList.add(new IntIndexItem(indexItemCount, 0, batchSize, batchSum, batchMax));
+            }
+        }
+        return indexItemList;
     }
 
     @Override

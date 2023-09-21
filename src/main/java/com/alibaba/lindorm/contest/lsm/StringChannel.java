@@ -16,6 +16,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private static final int TMP_IDX_SIZE = 4 + 4;
 
+    private static final int IDX_SIZE = 4;
+
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
     }
@@ -91,7 +93,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 //        return null;
     }
 
-    private List<StringIndexItem> loadAllIndex() throws IOException {
+    @Override
+    protected List<StringIndexItem> loadAllIndex() throws IOException {
         FileInputStream fileInputStream = new FileInputStream(indexFile);
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
         if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
@@ -99,10 +102,10 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
         fileInputStream.close();
 
-        if (byteBuffer.limit() % 4 != 0) {
+        if (byteBuffer.limit() % IDX_SIZE != 0) {
             throw new IllegalStateException("稀疏索引文件损坏");
         }
-        int indexItemCount = byteBuffer.limit() / 4;
+        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
         List<StringIndexItem> indexItemList = new ArrayList<>(indexItemCount);
 
         if (indexItemCount > 0) {

@@ -19,6 +19,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private static final int TMP_IDX_SIZE = 4 + 4 + 8 + 8;
 
+    private static final int IDX_SIZE = 8 + 8;
+
     private double batchSum;
 
     private double batchMax = -Double.MAX_VALUE;
@@ -75,7 +77,42 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     protected int batchGrow(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
-        return 0;
+        return 8;
+    }
+
+    @Override
+    protected List<DoubleIndexItem> loadAllIndex() throws IOException {
+        FileInputStream fileInputStream = new FileInputStream(indexFile);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
+        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
+            throw new IllegalStateException("稀疏索引文件损坏");
+        }
+        fileInputStream.close();
+
+        if (byteBuffer.limit() % IDX_SIZE != 0) {
+            throw new IllegalStateException("稀疏索引文件损坏");
+        }
+        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
+        List<DoubleIndexItem> indexItemList = new ArrayList<>(indexItemCount);
+
+        if (indexItemCount > 0) {
+            indexItemList.add(new DoubleIndexItem(0, 0, FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
+        }
+
+        for (int i = 1; i < indexItemCount; i++) {
+            DoubleIndexItem indexItem = indexItemList.get(i - 1);
+            indexItemList.add(new DoubleIndexItem(i, indexItem.getPos() + indexItem.getSize(), FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
+        }
+
+        if (batchItemCount > 0) {
+            if (indexItemCount > 0) {
+                DoubleIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+                indexItemList.add(new DoubleIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize, batchSum, batchMax));
+            } else {
+                indexItemList.add(new DoubleIndexItem(indexItemCount, 0, batchSize, batchSum, batchMax));
+            }
+        }
+        return indexItemList;
     }
 
     @Override

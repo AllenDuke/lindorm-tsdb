@@ -73,6 +73,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         batchSize = 0;
     }
 
+    protected abstract List<? extends ColumnIndexItem> loadAllIndex() throws IOException;
+
     protected abstract void append0(C c) throws IOException;
 
     protected abstract int batchGrow(C c) throws IOException;

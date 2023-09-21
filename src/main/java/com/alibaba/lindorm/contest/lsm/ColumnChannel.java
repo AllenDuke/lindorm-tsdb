@@ -53,11 +53,14 @@ public abstract class ColumnChannel<C extends ColumnValue> {
                 System.out.println(("tmpIdxFile文件删除失败。"));
             }
         }
+
     }
 
     protected abstract void index() throws IOException;
 
     protected abstract void recoverTmpIndex() throws IOException;
+
+    protected abstract void noNeedRecoverTmpIndex() throws IOException;
 
     protected abstract void shutdownTmpIndex() throws IOException;
 
@@ -94,6 +97,9 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         columnOutput.close();
 
         columnInput.close();
+
+        indexOutput.flush();
+        indexOutput.close();
     }
 
     public void flush() throws IOException {

@@ -23,7 +23,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private double batchSum;
 
-    private double batchMax = -Double.MAX_VALUE;
+    private double batchMax;
 
     public DoubleChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
@@ -43,6 +43,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         CommonUtils.writeDouble(indexOutput, batchMax);
 
         batchSum = 0;
+        batchMax = -Double.MAX_VALUE;
+    }
+
+    @Override
+    protected void noNeedRecoverTmpIndex() throws IOException {
         batchMax = -Double.MAX_VALUE;
     }
 
@@ -157,8 +162,10 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
         for (TimeItem timeItem : timeItemList) {
-            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
-            timeItemSet.add(timeItem.getItemNum());
+            if (timeItem.getTime() > 0) {
+                Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+                timeItemSet.add(timeItem.getItemNum());
+            }
         }
 
         if (!batchTimeItemSetMap.isEmpty()) {
@@ -168,11 +175,20 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         if (columnFilter == null && !batchItemList.isEmpty()) {
             // 通过索引处理
-            Map<Integer, DoubleIndexItem> indexItemMap = loadAllIndex().stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
+            indexOutput.flush();
+            List<DoubleIndexItem> indexItemList = loadAllIndex();
+            Map<Integer, DoubleIndexItem> indexItemMap = indexItemList.stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
             for (TimeItem item : batchItemList) {
                 DoubleIndexItem doubleIndexItem = indexItemMap.get((int) item.getBatchNum());
-                sum += doubleIndexItem.getBatchSum();
                 max = Math.max(max, doubleIndexItem.getBatchMax());
+                if (batchItemCount > 0 && item.getBatchNum() == indexItemList.get(indexItemList.size() - 1).getBatchNum()) {
+                    // 位于内存中的半包
+                    validCount += batchItemCount;
+                    sum += batchSum;
+                } else {
+                    sum += doubleIndexItem.getBatchSum();
+                    validCount += LsmStorage.MAX_ITEM_CNT_L0;
+                }
             }
         }
 
@@ -211,5 +227,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             return new ColumnValue.DoubleFloatColumn(max);
         }
         throw new IllegalStateException("非法聚合函数");
+    }
+
+    @Override
+    public void flush() throws IOException {
+        indexOutput.flush();
+        super.flush();
     }
 }

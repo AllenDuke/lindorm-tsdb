@@ -54,9 +54,10 @@ public class TestMyDbReadOnly {
             long begin = System.currentTimeMillis();
 
             resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC,
                     TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.AVG, TestMyDb.ITEM_CNT / 10,
                     new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
+            System.out.println(Math.abs((double) (TestMyDb.ITEM_CNT - 1) / 2 - resultSet.get(0).getColumns().get("col1").getDoubleFloatValue()));
             showResult(resultSet);
 
             resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",

@@ -22,10 +22,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private long batchSum;
 
-    private int batchMax = Integer.MIN_VALUE;
+    private int batchMax;
 
     public IntChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
+
     }
 
     @Override
@@ -34,6 +35,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         columnOutput.writeInt(i);
         batchSum += i;
         batchMax = Math.max(batchMax, i);
+    }
+
+    @Override
+    protected void noNeedRecoverTmpIndex() throws IOException {
+        batchMax = Integer.MIN_VALUE;
     }
 
     @Override
@@ -151,14 +157,14 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
-        double sum = 0.0;
+        long sum = 0;
         int validCount = 0;
         int max = Integer.MIN_VALUE;
 
         Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
         for (TimeItem timeItem : timeItemList) {
-            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
             if (timeItem.getTime() > 0) {
+                Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
                 timeItemSet.add(timeItem.getItemNum());
             }
         }
@@ -169,11 +175,20 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
         if (columnFilter == null && !batchItemList.isEmpty()) {
             // 通过索引处理
-            Map<Integer, IntIndexItem> indexItemMap = loadAllIndex().stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
+            indexOutput.flush();
+            List<IntIndexItem> indexItemList = loadAllIndex();
+            Map<Integer, IntIndexItem> indexItemMap = indexItemList.stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
             for (TimeItem item : batchItemList) {
                 IntIndexItem intIndexItem = indexItemMap.get((int) item.getBatchNum());
-                sum += intIndexItem.getBatchSum();
                 max = Math.max(max, intIndexItem.getBatchMax());
+                if (batchItemCount > 0 && item.getBatchNum() == indexItemList.get(indexItemList.size() - 1).getBatchNum()) {
+                    // 位于内存中的半包
+                    validCount += batchItemCount;
+                    sum += batchSum;
+                } else {
+                    sum += intIndexItem.getBatchSum();
+                    validCount += LsmStorage.MAX_ITEM_CNT_L0;
+                }
             }
         }
 
@@ -205,7 +220,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             if (validCount == 0) {
                 return new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY);
             }
-            return new ColumnValue.DoubleFloatColumn(sum / validCount);
+            return new ColumnValue.DoubleFloatColumn((double) sum / validCount);
         }
         if (Aggregator.MAX.equals(aggregator)) {
             if (validCount == 0) {
@@ -214,5 +229,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             return new ColumnValue.IntegerColumn(max);
         }
         throw new IllegalStateException("非法聚合函数");
+    }
+
+    @Override
+    public void flush() throws IOException {
+        indexOutput.flush();
+        super.flush();
     }
 }

@@ -34,6 +34,11 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
+    protected void noNeedRecoverTmpIndex() throws IOException {
+
+    }
+
+    @Override
     protected void recoverTmpIndex() throws IOException {
         ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
         FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
@@ -192,12 +197,5 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
 
         return new ColumnValue.StringColumn(wrap);
-    }
-
-    @Override
-    public void shutdown() throws IOException {
-        indexOutput.flush();
-        indexOutput.close();
-        super.shutdown();
     }
 }

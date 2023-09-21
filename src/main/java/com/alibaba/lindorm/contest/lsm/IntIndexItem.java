@@ -12,7 +12,7 @@ public class IntIndexItem extends ColumnIndexItem {
         this.batchMax = batchMax;
     }
 
-    public double getBatchSum() {
+    public long getBatchSum() {
         return batchSum;
     }
 

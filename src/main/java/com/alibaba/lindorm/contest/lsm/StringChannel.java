@@ -16,69 +16,49 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private static final int TMP_IDX_SIZE = 4 + 4;
 
-    private final OutputStream indexOutput;
-
-    private final File indexFile;
-
-    /**
-     * 作用于shutdown时，没有满一批。
-     */
-    private final File tmpIndexFile;
-
-    private int batchSize;
-
-    private int batchItemCount;
-
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
-
-        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
-        if (!indexFile.exists()) {
-            indexFile.createNewFile();
-        }
-        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
-
-        tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
-        if (tmpIndexFile.exists()) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
-            FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
-            int read = fileInputStream.read(byteBuffer.array());
-            if (read != TMP_IDX_SIZE) {
-                throw new IllegalStateException("tmpIdxFile文件损坏。");
-            }
-            fileInputStream.close();
-            if (!tmpIndexFile.delete()) {
-                System.out.println(("tmpIdxFile文件删除失败。"));
-            }
-
-            batchItemCount = byteBuffer.getInt();
-            batchSize = byteBuffer.getInt();
-        }
     }
 
     @Override
-    public void append(ColumnValue.StringColumn stringColumn) throws IOException {
+    protected void shutdownTmpIndex() throws IOException {
+        FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        byteBuffer.putInt(batchItemCount);
+        byteBuffer.putInt(batchSize);
+        fileOutputStream.write(byteBuffer.array());
+        fileOutputStream.flush();
+        fileOutputStream.close();
+    }
+
+    @Override
+    protected void recoverTmpIndex() throws IOException {
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
+        int read = fileInputStream.read(byteBuffer.array());
+        if (read != TMP_IDX_SIZE) {
+            throw new IllegalStateException("tmpIdxFile文件损坏。");
+        }
+        fileInputStream.close();
+
+        batchItemCount = byteBuffer.getInt();
+        batchSize = byteBuffer.getInt();
+    }
+
+    @Override
+    protected void append0(ColumnValue.StringColumn stringColumn) throws IOException {
         // todo 批压缩
         columnOutput.writeString(stringColumn.getStringValue());
-        batchItemCount++;
-        batchSize += 4 + stringColumn.getStringValue().limit();
-
-        checkAndIndex();
     }
 
-    private void batchIndex() throws IOException {
+    @Override
+    protected int batchGrow(ColumnValue.StringColumn stringColumn) throws IOException {
+        return 4 + stringColumn.getStringValue().limit();
+    }
+
+    @Override
+    protected void index() throws IOException {
         CommonUtils.writeInt(indexOutput, batchSize);
-        batchItemCount = 0;
-        batchSize = 0;
-    }
-
-    public boolean checkAndIndex() throws IOException {
-        if (batchItemCount < LsmStorage.MAX_ITEM_CNT_L0) {
-            return false;
-        }
-
-        batchIndex();
-        return true;
     }
 
     @Override
@@ -213,20 +193,6 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public void shutdown() throws IOException {
-        if (batchItemCount > 0) {
-            if (!tmpIndexFile.exists()) {
-                tmpIndexFile.createNewFile();
-            }
-
-            FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
-            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
-            byteBuffer.putInt(batchItemCount);
-            byteBuffer.putInt(batchSize);
-            fileOutputStream.write(byteBuffer.array());
-            fileOutputStream.flush();
-            fileOutputStream.close();
-        }
-
         indexOutput.flush();
         indexOutput.close();
         super.shutdown();

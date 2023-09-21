@@ -6,6 +6,8 @@ import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -15,13 +17,65 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 8 + 8;
 
+    private static final int TMP_IDX_SIZE = 4 + 4 + 8 + 8;
+
+    private double batchSum;
+
+    private double batchMax = -Double.MAX_VALUE;
+
     public DoubleChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
     }
 
     @Override
-    public void append(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
-        columnOutput.writeDouble(doubleFloatColumn.getDoubleFloatValue());
+    public void append0(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
+        double v = doubleFloatColumn.getDoubleFloatValue();
+        columnOutput.writeDouble(v);
+        batchSum += v;
+        batchMax = Math.max(batchMax, v);
+    }
+
+    @Override
+    protected void index() throws IOException {
+        CommonUtils.writeDouble(indexOutput, batchSum);
+        CommonUtils.writeDouble(indexOutput, batchMax);
+
+        batchSum = 0;
+        batchMax = -Double.MAX_VALUE;
+    }
+
+    @Override
+    protected void recoverTmpIndex() throws IOException {
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
+        int read = fileInputStream.read(byteBuffer.array());
+        if (read != TMP_IDX_SIZE) {
+            throw new IllegalStateException("tmpIdxFile文件损坏。");
+        }
+        fileInputStream.close();
+
+        batchItemCount = byteBuffer.getInt();
+        batchSize = byteBuffer.getInt();
+        batchSum = byteBuffer.getDouble();
+        batchMax = byteBuffer.getDouble();
+    }
+
+    @Override
+    protected void shutdownTmpIndex() throws IOException {
+        FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        byteBuffer.putInt(batchItemCount);
+        byteBuffer.putInt(batchSize);
+        byteBuffer.putDouble(batchSum);
+        byteBuffer.putDouble(batchMax);
+        fileOutputStream.write(byteBuffer.array());
+        fileOutputStream.flush();
+        fileOutputStream.close();
+    }
+
+    @Override
+    protected int batchGrow(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
+        return 0;
     }
 
     @Override

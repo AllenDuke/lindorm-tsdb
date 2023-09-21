@@ -5,9 +5,7 @@ import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
@@ -18,13 +16,65 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 4;
 
+    private static final int TMP_IDX_SIZE = 4 + 4 + 8 + 4;
+
+    private long batchSum;
+
+    private int batchMax = Integer.MIN_VALUE;
+
     public IntChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
     }
 
     @Override
-    public void append(ColumnValue.IntegerColumn integerColumn) throws IOException {
-        columnOutput.writeInt(integerColumn.getIntegerValue());
+    public void append0(ColumnValue.IntegerColumn integerColumn) throws IOException {
+        int i = integerColumn.getIntegerValue();
+        columnOutput.writeInt(i);
+        batchSum += i;
+        batchMax = Math.max(batchMax, i);
+    }
+
+    @Override
+    protected void recoverTmpIndex() throws IOException {
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        FileInputStream fileInputStream = new FileInputStream(tmpIndexFile);
+        int read = fileInputStream.read(byteBuffer.array());
+        if (read != TMP_IDX_SIZE) {
+            throw new IllegalStateException("tmpIdxFile文件损坏。");
+        }
+        fileInputStream.close();
+
+        batchItemCount = byteBuffer.getInt();
+        batchSize = byteBuffer.getInt();
+        batchSum = byteBuffer.getLong();
+        batchMax = byteBuffer.getInt();
+    }
+
+    @Override
+    protected void shutdownTmpIndex() throws IOException {
+        FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
+        byteBuffer.putInt(batchItemCount);
+        byteBuffer.putInt(batchSize);
+        byteBuffer.putLong(batchSum);
+        byteBuffer.putInt(batchMax);
+        fileOutputStream.write(byteBuffer.array());
+        fileOutputStream.flush();
+        fileOutputStream.close();
+    }
+
+    @Override
+    protected int batchGrow(ColumnValue.IntegerColumn integerColumn) throws IOException {
+        return 4;
+    }
+
+    @Override
+    protected void index() throws IOException {
+        CommonUtils.writeLong(indexOutput, batchSum);
+        CommonUtils.writeInt(indexOutput, batchMax);
+
+        batchSum = 0;
+        batchMax = Integer.MIN_VALUE;
     }
 
     @Override

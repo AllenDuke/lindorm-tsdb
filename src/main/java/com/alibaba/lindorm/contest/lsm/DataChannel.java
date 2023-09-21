@@ -4,6 +4,7 @@ import com.alibaba.lindorm.contest.CommonUtils;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
 import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
@@ -24,18 +25,26 @@ public class DataChannel {
 
     private ByteBuffer lastBuffer;
 
+    private FileChannel channel;
+    private MappedByteBuffer mappedByteBuffer;
+    private long channelRealSize = 8;
+
     private final int ioMode;
 
     private final File dataFile;
 
-    public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws FileNotFoundException {
+    public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws IOException {
         this.ioMode = ioMode;
         this.dataFile = dataFile;
-        if (this.ioMode == 2) {
+        inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
+        if (this.ioMode == 3) {
+            channel = new RandomAccessFile(dataFile, "rw").getChannel();
+            mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, 16 * 1024);
+            channelRealSize = mappedByteBuffer.getLong();
+        } else if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
 //            inputNio = new FileInputStream(dataFile).getChannel();
-//            inputBioStream = new FileInputStream(dataFile);
-            inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
+//            inputBioStream = new FileInputStream(dataFile); 
 
             // 5000个vin 60+1列，这里需要2.5GB
             lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 16 * 1024));
@@ -142,6 +151,11 @@ public class DataChannel {
     }
 
     public void close() throws IOException {
+        if (ioMode == 3) {
+            channel.truncate(channelRealSize);
+            channel.close();
+            return;
+        }
         if (ioMode == 2) {
             outputNio.close();
 //            inputNio.close();

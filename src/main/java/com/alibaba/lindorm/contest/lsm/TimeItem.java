@@ -2,6 +2,9 @@ package com.alibaba.lindorm.contest.lsm;
 
 public class TimeItem {
 
+    /**
+     * agg时可能不会设值
+     */
     private long time;
 
     /**

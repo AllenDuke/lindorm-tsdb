@@ -65,6 +65,9 @@ public class LsmStorage {
 
     private Long latestTime;
 
+    /**
+     * todo 软引用
+     */
     private Row latestRow;
 
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
@@ -160,7 +163,7 @@ public class LsmStorage {
             throw new IllegalStateException("string类型不支持聚合");
         }
 
-        List<TimeItem> timeRange = timeChannel.range(l, r);
+        List<TimeItem> timeRange = timeChannel.agg(l, r);
         if (timeRange.isEmpty()) {
             return null;
         }

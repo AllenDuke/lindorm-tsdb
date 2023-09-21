@@ -189,6 +189,55 @@ public class TimeChannel {
         }
     }
 
+    public List<TimeItem> agg(long l, long r) throws IOException {
+        boolean flushed = false;
+
+        List<TimeItem> timeItemList = new ArrayList<>();
+
+        int indexItemCount = timeIndexItemList.size();
+        for (int i = 0; i < indexItemCount; i++) {
+            long minTime = timeIndexItemList.get(i).getMinTime();
+            long maxTime = timeIndexItemList.get(i).getMaxTime();
+            if (l > maxTime || r <= minTime) {
+                continue;
+            }
+            // 需要扫描这一批次
+            if (minTime >= l && maxTime < r) {
+                // 这一完整批次符合条件，但因为是agg，所以不需要扫描数据文件，在内存中生成
+                for (int itemNum = 0; itemNum < LsmStorage.MAX_ITEM_CNT_L0; itemNum++) {
+                    timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * i + itemNum));
+                }
+            } else {
+                if (!flushed) {
+                    flush();
+                    flushed = true;
+                }
+                timeItemList.addAll(range(l, r, i, timeInput));
+            }
+        }
+        if (batchItemCount > 0) {
+            if (l > maxTime || r <= minTime) {
+                // no need
+            } else {
+                // 需要扫描这一批次
+                if (minTime >= l && maxTime < r) {
+                    // 这一完整批次符合条件，但因为是agg，所以不需要扫描数据文件，在内存中生成
+                    for (int itemNum = 0; itemNum < batchItemCount; itemNum++) {
+                        timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * indexItemCount + itemNum));
+                    }
+                } else {
+                    if (!flushed) {
+                        flush();
+                        flushed = true;
+                    }
+                    timeItemList.addAll(range(l, r, indexItemCount, timeInput));
+                }
+            }
+        }
+
+        return timeItemList;
+    }
+
     /**
      * todo 读写锁
      *

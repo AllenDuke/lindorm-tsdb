@@ -12,14 +12,16 @@ import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
 
 public class DataChannel {
 
+    private static final int BUFFER_SIZE = 8 * 1024;
+
     private FileChannel outputNio;
 
     private OutputStream outputBio;
 
-    private InputStream inputBioStream;
+    //    private InputStream inputBioStream;
     private RandomAccessFile inputRandomAccessFile;
 
-    private FileChannel inputNio;
+//    private FileChannel inputNio;
 
     private long inputBioPos;
 
@@ -27,27 +29,30 @@ public class DataChannel {
 
     private FileChannel channel;
     private MappedByteBuffer mappedByteBuffer;
-    private long channelRealSize = 8;
+    private long channelRealSize;
 
     private final int ioMode;
 
-    private final File dataFile;
+//    private final File dataFile;
 
     public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws IOException {
         this.ioMode = ioMode;
-        this.dataFile = dataFile;
+//        this.dataFile = dataFile;
         inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
         if (this.ioMode == 3) {
             channel = new RandomAccessFile(dataFile, "rw").getChannel();
-            mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, 16 * 1024);
+            mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, 8);
             channelRealSize = mappedByteBuffer.getLong();
+            if (channelRealSize > 0) {
+                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8, BUFFER_SIZE);
+            }
         } else if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
 //            inputNio = new FileInputStream(dataFile).getChannel();
 //            inputBioStream = new FileInputStream(dataFile); 
 
             // 5000个vin 60+1列，这里需要2.5GB
-            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, 16 * 1024));
+            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, BUFFER_SIZE));
         } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);
         } else {
@@ -74,7 +79,21 @@ public class DataChannel {
     }
 
     private void writeBytes(byte[] b, int pos) throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+            if (pos >= b.length) {
+                return;
+            }
+            while (mappedByteBuffer.hasRemaining() && pos < b.length) {
+                mappedByteBuffer.put(b[pos++]);
+            }
+            if (mappedByteBuffer.position() >= mappedByteBuffer.limit()) {
+                // 当前已写满，向下增长
+                channelRealSize += BUFFER_SIZE;
+                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8 + channelRealSize, BUFFER_SIZE);
+            }
+
+            writeBytes(b, pos);
+        } else if (ioMode == 2) {
             if (pos >= b.length) {
                 return;
             }
@@ -90,7 +109,15 @@ public class DataChannel {
     }
 
     public void writeLong(long l) throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+            if (mappedByteBuffer.remaining() >= 8) {
+                mappedByteBuffer.putLong(l);
+            } else {
+                byte[] b = new byte[8];
+                UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET, l, true);
+                writeBytes(b, 0);
+            }
+        } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putLong(l);
             } else {
@@ -105,7 +132,15 @@ public class DataChannel {
     }
 
     public void writeInt(int i) throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+            if (mappedByteBuffer.remaining() >= 4) {
+                mappedByteBuffer.putInt(i);
+            } else {
+                byte[] b = new byte[4];
+                UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, i, true);
+                writeBytes(b, 0);
+            }
+        } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 4) {
                 lastBuffer.putInt(i);
             } else {
@@ -120,7 +155,13 @@ public class DataChannel {
     }
 
     public void writeDouble(double d) throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+            if (mappedByteBuffer.remaining() >= 8) {
+                mappedByteBuffer.putDouble(d);
+            } else {
+                writeLong(Double.doubleToLongBits(d));
+            }
+        } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putDouble(d);
             } else {
@@ -133,7 +174,10 @@ public class DataChannel {
     }
 
     public void writeString(ByteBuffer buffer) throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+            writeInt(buffer.limit());
+            writeBytes(buffer.array(), 0);
+        } else if (ioMode == 2) {
             writeInt(buffer.limit());
             writeBytes(buffer.array(), 0);
         } else {
@@ -142,7 +186,9 @@ public class DataChannel {
     }
 
     public void flush() throws IOException {
-        if (ioMode == 2) {
+        if (ioMode == 3) {
+
+        } else if (ioMode == 2) {
             nioFlushBuffer();
             outputNio.force(true);
         } else {
@@ -152,7 +198,7 @@ public class DataChannel {
 
     public void close() throws IOException {
         if (ioMode == 3) {
-            channel.truncate(channelRealSize);
+//            channel.truncate(channelRealSize + 8);
             channel.close();
             return;
         }
@@ -167,6 +213,11 @@ public class DataChannel {
     }
 
     protected ByteBuffer read(long pos, int size) throws IOException {
+        if (ioMode == 3) {
+            pos += 8;
+            return channel.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, channel.size() - pos));
+        }
+
 //        if (ioMode == 2) {
 //            return inputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
 //        } else {

@@ -17,7 +17,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     /**
      * todo lru
      */
-    private final RandomAccessFile columnInput;
+//    private final RandomAccessFile columnInput;
 
     protected final OutputStream indexOutput;
 
@@ -38,7 +38,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
             columnFile.createNewFile();
         }
         columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
-        columnInput = new RandomAccessFile(columnFile, "r");
+//        columnInput = new RandomAccessFile(columnFile, "r");
 
         indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
         if (!indexFile.exists()) {
@@ -96,7 +96,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         flush();
         columnOutput.close();
 
-        columnInput.close();
+//        columnInput.close();
 
         indexOutput.flush();
         indexOutput.close();

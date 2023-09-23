@@ -211,11 +211,12 @@ public class LsmStorage {
         }
         int i = 0;
         while (byteBuffer.hasRemaining() && i < batchNumList.size()) {
-            byteBuffer.position(i * columnIndexItemSize + begin);
-            if (!byteBuffer.hasRemaining()) {
+            int indexBegin = i * columnIndexItemSize + begin;
+            if (indexBegin >= byteBuffer.limit()) {
                 i++;
                 continue;
             }
+            byteBuffer.position(indexBegin);
             ColumnChannel columnChannel = columnChannelMap.get(columnName);
             ColumnIndexItem columnIndexItem = columnChannel.readColumnIndexItem(byteBuffer);
             columnIndexItemMap.put(batchNumList.get(i), columnIndexItem);

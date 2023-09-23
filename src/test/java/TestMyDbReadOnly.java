@@ -53,6 +53,12 @@ public class TestMyDbReadOnly {
 
             long begin = System.currentTimeMillis();
 
+            requestedColumns = new HashSet<>(Arrays.asList( "col3"));
+            resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 60_000,
+                    TestMyDb.UTC + TestMyDb.ITEM_CNT));
+            showResult(resultSet);
+
             resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC,
                     TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.AVG, TestMyDb.ITEM_CNT / 10,
@@ -71,7 +77,6 @@ public class TestMyDbReadOnly {
             tsdbEngineSample.shutdown();
         } catch (Throwable e) {
             System.out.println(e.getMessage());
-            tsdbEngineSample.shutdown();
         }
     }
 

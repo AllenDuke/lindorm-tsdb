@@ -59,6 +59,11 @@ public class TestMyDbReadOnlyMt {
                         ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
                         showResult(resultSet);
 
+                        resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
+                                new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 10,
+                                TestMyDb.UTC + TestMyDb.ITEM_CNT));
+                        showResult(resultSet);
+
                         resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
                                 new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
                                 TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.MAX, TestMyDb.ITEM_CNT / 10,

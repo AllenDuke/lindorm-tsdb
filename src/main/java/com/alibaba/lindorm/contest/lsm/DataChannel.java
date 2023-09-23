@@ -12,7 +12,7 @@ import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
 
 public class DataChannel {
 
-    private static final int BUFFER_SIZE = 8 * 1024;
+    private static final int BUFFER_SIZE = 16 * 1024;
 
     private FileChannel outputNio;
 

@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 public class LsmStorage {
 
-    public static final int IO_MODE = 3;
+    public static final int IO_MODE = 2;
 
     /**
      * 每8k数据为一块

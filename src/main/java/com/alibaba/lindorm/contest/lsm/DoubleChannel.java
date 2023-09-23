@@ -39,11 +39,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     protected void index() throws IOException {
-        CommonUtils.writeDouble(indexOutput, batchSum);
-        CommonUtils.writeDouble(indexOutput, batchMax);
-
-        batchSum = 0;
-        batchMax = -Double.MAX_VALUE;
+//        CommonUtils.writeDouble(indexOutput, batchSum);
+//        CommonUtils.writeDouble(indexOutput, batchMax);
+//
+//        batchSum = 0;
+//        batchMax = -Double.MAX_VALUE;
     }
 
     @Override
@@ -87,37 +87,38 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     protected List<DoubleIndexItem> loadAllIndex() throws IOException {
-        FileInputStream fileInputStream = new FileInputStream(indexFile);
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
-        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
-            throw new IllegalStateException("稀疏索引文件损坏");
-        }
-        fileInputStream.close();
-
-        if (byteBuffer.limit() % IDX_SIZE != 0) {
-            throw new IllegalStateException("稀疏索引文件损坏");
-        }
-        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
-        List<DoubleIndexItem> indexItemList = new ArrayList<>(indexItemCount);
-
-        if (indexItemCount > 0) {
-            indexItemList.add(new DoubleIndexItem(0, 0, FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
-        }
-
-        for (int i = 1; i < indexItemCount; i++) {
-            DoubleIndexItem indexItem = indexItemList.get(i - 1);
-            indexItemList.add(new DoubleIndexItem(i, indexItem.getPos() + indexItem.getSize(), FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
-        }
-
-        if (batchItemCount > 0) {
-            if (indexItemCount > 0) {
-                DoubleIndexItem indexItem = indexItemList.get(indexItemCount - 1);
-                indexItemList.add(new DoubleIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize, batchSum, batchMax));
-            } else {
-                indexItemList.add(new DoubleIndexItem(indexItemCount, 0, batchSize, batchSum, batchMax));
-            }
-        }
-        return indexItemList;
+//        FileInputStream fileInputStream = new FileInputStream(indexFile);
+//        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
+//        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
+//            throw new IllegalStateException("稀疏索引文件损坏");
+//        }
+//        fileInputStream.close();
+//
+//        if (byteBuffer.limit() % IDX_SIZE != 0) {
+//            throw new IllegalStateException("稀疏索引文件损坏");
+//        }
+//        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
+//        List<DoubleIndexItem> indexItemList = new ArrayList<>(indexItemCount);
+//
+//        if (indexItemCount > 0) {
+//            indexItemList.add(new DoubleIndexItem(0, 0, FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
+//        }
+//
+//        for (int i = 1; i < indexItemCount; i++) {
+//            DoubleIndexItem indexItem = indexItemList.get(i - 1);
+//            indexItemList.add(new DoubleIndexItem(i, indexItem.getPos() + indexItem.getSize(), FULL_BATCH_SIZE, byteBuffer.getDouble(), byteBuffer.getDouble()));
+//        }
+//
+//        if (batchItemCount > 0) {
+//            if (indexItemCount > 0) {
+//                DoubleIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+//                indexItemList.add(new DoubleIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize, batchSum, batchMax));
+//            } else {
+//                indexItemList.add(new DoubleIndexItem(indexItemCount, 0, batchSize, batchSum, batchMax));
+//            }
+//        }
+//        return indexItemList;
+        return null;
     }
 
     @Override
@@ -174,20 +175,18 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         }
 
         if (columnFilter == null && !batchItemList.isEmpty()) {
-            // 通过索引处理
-            indexOutput.flush();
-            List<DoubleIndexItem> indexItemList = loadAllIndex();
-            Map<Integer, DoubleIndexItem> indexItemMap = indexItemList.stream().collect(Collectors.toMap(ColumnIndexItem::getBatchNum, e -> e));
             for (TimeItem item : batchItemList) {
-                DoubleIndexItem doubleIndexItem = indexItemMap.get((int) item.getBatchNum());
-                max = Math.max(max, doubleIndexItem.getBatchMax());
-                if (batchItemCount > 0 && item.getBatchNum() == indexItemList.get(indexItemList.size() - 1).getBatchNum()) {
-                    // 位于内存中的半包
-                    validCount += batchItemCount;
-                    sum += batchSum;
-                } else {
-                    sum += doubleIndexItem.getBatchSum();
-                    validCount += LsmStorage.MAX_ITEM_CNT_L0;
+                long batchNum = item.getBatchNum();
+                ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+                double last = byteBuffer.getDouble();
+                sum += last;
+                validCount++;
+                max = Math.max(last, max);
+                while (byteBuffer.remaining() > 0) {
+                    last = byteBuffer.getDouble();
+                    sum += last;
+                    validCount++;
+                    max = Math.max(last, max);
                 }
             }
         }
@@ -234,7 +233,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         if (!isDirty) {
             return;
         }
-        indexOutput.flush();
+//        indexOutput.flush();
         super.flush();
         isDirty = false;
     }

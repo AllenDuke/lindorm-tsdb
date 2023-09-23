@@ -233,7 +233,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public void flush() throws IOException {
+        if (!isDirty) {
+            return;
+        }
         indexOutput.flush();
         super.flush();
+        isDirty = false;
     }
 }

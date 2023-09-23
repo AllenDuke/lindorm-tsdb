@@ -231,7 +231,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     public void flush() throws IOException {
+        if (!isDirty) {
+            return;
+        }
         indexOutput.flush();
         super.flush();
+        isDirty = false;
     }
 }

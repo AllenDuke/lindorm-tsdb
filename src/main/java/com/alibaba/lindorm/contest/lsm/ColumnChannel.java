@@ -19,10 +19,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      */
 //    private final RandomAccessFile columnInput;
 
-    protected final OutputStream indexOutput;
-
-    protected final File indexFile;
-
     /**
      * 作用于shutdown时，没有满一批。
      */
@@ -32,6 +28,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected int batchItemCount;
 
+    protected boolean isDirty;
+
     public ColumnChannel(File vinDir, TableSchema.Column column) throws IOException {
         columnFile = new File(vinDir.getAbsolutePath(), column.columnName);
         if (!columnFile.exists()) {
@@ -39,12 +37,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         }
         columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 //        columnInput = new RandomAccessFile(columnFile, "r");
-
-        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
-        if (!indexFile.exists()) {
-            indexFile.createNewFile();
-        }
-        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
 
         tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
         if (tmpIndexFile.exists()) {
@@ -65,6 +57,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     protected abstract void shutdownTmpIndex() throws IOException;
 
     public void append(C c) throws IOException {
+        isDirty = true;
         append0(c);
         batchItemCount++;
         batchSize += batchGrow(c);
@@ -97,13 +90,14 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         columnOutput.close();
 
 //        columnInput.close();
-
-        indexOutput.flush();
-        indexOutput.close();
     }
 
     public void flush() throws IOException {
+        if (!isDirty) {
+            return;
+        }
         columnOutput.flush();
+        isDirty = false;
     }
 
     /**

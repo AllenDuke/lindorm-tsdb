@@ -46,6 +46,8 @@ public class TimeChannel {
 
     private RandomAccessFile timeInput;
 
+    private boolean isDirty;
+
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
         if (!timeFile.exists()) {
@@ -89,6 +91,7 @@ public class TimeChannel {
     }
 
     public void append(long time) throws IOException {
+        isDirty = true;
         if (batchItemCount == 0) {
             minTime = time;
             maxTime = time;
@@ -138,8 +141,12 @@ public class TimeChannel {
     }
 
     public void flush() throws IOException {
+        if (!isDirty) {
+            return;
+        }
         timeOutput.flush();
         timeIndexOutput.flush();
+        isDirty = false;
     }
 
     private void index() throws IOException {

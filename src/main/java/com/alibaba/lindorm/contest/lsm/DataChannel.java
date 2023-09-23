@@ -33,6 +33,8 @@ public class DataChannel {
 
     private final int ioMode;
 
+    private boolean isDirty;
+
 //    private final File dataFile;
 
     public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws IOException {
@@ -79,6 +81,7 @@ public class DataChannel {
     }
 
     private void writeBytes(byte[] b, int pos) throws IOException {
+        isDirty = true;
         if (ioMode == 3) {
             if (pos >= b.length) {
                 return;
@@ -109,6 +112,7 @@ public class DataChannel {
     }
 
     public void writeLong(long l) throws IOException {
+        isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 8) {
                 mappedByteBuffer.putLong(l);
@@ -132,6 +136,7 @@ public class DataChannel {
     }
 
     public void writeInt(int i) throws IOException {
+        isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 4) {
                 mappedByteBuffer.putInt(i);
@@ -155,6 +160,7 @@ public class DataChannel {
     }
 
     public void writeDouble(double d) throws IOException {
+        isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 8) {
                 mappedByteBuffer.putDouble(d);
@@ -174,6 +180,7 @@ public class DataChannel {
     }
 
     public void writeString(ByteBuffer buffer) throws IOException {
+        isDirty = true;
         if (ioMode == 3) {
             writeInt(buffer.limit());
             writeBytes(buffer.array(), 0);
@@ -186,6 +193,9 @@ public class DataChannel {
     }
 
     public void flush() throws IOException {
+        if (!isDirty) {
+            return;
+        }
         if (ioMode == 3) {
 
         } else if (ioMode == 2) {
@@ -194,6 +204,7 @@ public class DataChannel {
         } else {
             outputBio.flush();
         }
+        isDirty = false;
     }
 
     public void close() throws IOException {

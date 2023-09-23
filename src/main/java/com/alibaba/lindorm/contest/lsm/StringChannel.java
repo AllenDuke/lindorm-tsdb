@@ -18,8 +18,18 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     private static final int IDX_SIZE = 4;
 
+    private final File indexFile;
+
+    private final OutputStream indexOutput;
+
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
+        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
+        if (!indexFile.exists()) {
+            indexFile.createNewFile();
+        }
+        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
+
     }
 
     @Override
@@ -197,5 +207,12 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
 
         return new ColumnValue.StringColumn(wrap);
+    }
+
+    @Override
+    public void shutdown() throws IOException {
+        indexOutput.flush();
+        indexOutput.close();
+        super.shutdown();
     }
 }

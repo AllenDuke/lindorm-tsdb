@@ -7,6 +7,7 @@ import com.alibaba.lindorm.contest.structs.CompareExpression;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 
 public abstract class ColumnChannel<C extends ColumnValue> {
 
@@ -25,6 +26,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     protected final File tmpIndexFile;
 
     protected int batchSize;
+
+    protected long batchPos;
 
     protected int batchItemCount;
 
@@ -65,19 +68,23 @@ public abstract class ColumnChannel<C extends ColumnValue> {
             return;
         }
         index(columnIndexChannel);
+        batchPos = columnOutput.channelSize();
         batchItemCount = 0;
         batchSize = 0;
     }
 
     protected abstract List<? extends ColumnIndexItem> loadAllIndex() throws IOException;
 
+    public abstract ColumnIndexItem readColumnIndexItem(ByteBuffer byteBuffer) throws IOException;
+
     protected abstract void append0(C c) throws IOException;
 
     protected abstract int batchGrow(C c) throws IOException;
 
-    public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList) throws IOException;
+    public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
-    public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException;
+    public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator,
+                                    CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
     public void shutdown() throws IOException {
         if (batchItemCount > 0) {

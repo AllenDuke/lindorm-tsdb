@@ -36,11 +36,12 @@ public class DataChannel {
 
     private boolean isDirty;
 
-//    private final File dataFile;
+    private final File dataFile;
+    private long size;
 
     public DataChannel(File dataFile, int ioMode, int nioBuffersSize, int bioBufferSize) throws IOException {
         this.ioMode = ioMode;
-//        this.dataFile = dataFile;
+        this.dataFile = dataFile;
         inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
         if (this.ioMode == 3) {
             channel = new RandomAccessFile(dataFile, "rw").getChannel();
@@ -51,6 +52,7 @@ public class DataChannel {
             }
         } else if (this.ioMode == 2) {
             outputNio = new FileOutputStream(dataFile, true).getChannel();
+            size = outputNio.size();
 //            inputNio = new FileInputStream(dataFile).getChannel();
 //            inputBioStream = new FileInputStream(dataFile); 
 
@@ -130,6 +132,7 @@ public class DataChannel {
     }
 
     public void writeLong(long l) throws IOException {
+        size += 8;
         isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 8) {
@@ -154,6 +157,7 @@ public class DataChannel {
     }
 
     public void writeInt(int i) throws IOException {
+        size += 4;
         isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 4) {
@@ -178,6 +182,7 @@ public class DataChannel {
     }
 
     public void writeDouble(double d) throws IOException {
+        size += 8;
         isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 8) {
@@ -204,9 +209,20 @@ public class DataChannel {
             writeBytes(buffer.array(), 0);
         } else if (ioMode == 2) {
             writeInt(buffer.limit());
+            size += buffer.limit();
             writeBytes(buffer.array(), 0);
         } else {
             CommonUtils.writeString(outputBio, buffer);
+        }
+    }
+
+    public long channelSize() throws IOException {
+        if (ioMode == 3) {
+            return channel.size();
+        } else if (ioMode == 2) {
+            return size;
+        } else {
+            return 0;
         }
     }
 
@@ -239,6 +255,10 @@ public class DataChannel {
         } else {
             outputBio.close();
         }
+    }
+
+    public InputStream readStream() throws FileNotFoundException {
+        return new FileInputStream(dataFile);
     }
 
     protected ByteBuffer read(long pos, int size) throws IOException {
@@ -282,6 +302,7 @@ public class DataChannel {
         }
         writeByte((byte) i);
         cnt++;
+        size += cnt;
         return cnt;
     }
 

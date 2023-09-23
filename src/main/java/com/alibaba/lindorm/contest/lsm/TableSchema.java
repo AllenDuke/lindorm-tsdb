@@ -12,6 +12,8 @@ public class TableSchema {
 
         ColumnValue.ColumnType columnType;
 
+        int indexSize;
+
         @Override
         public int hashCode() {
             return columnName.hashCode() + columnType.ordinal();

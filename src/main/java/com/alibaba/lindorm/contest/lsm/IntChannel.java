@@ -16,9 +16,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 4;
 
-    private static final int TMP_IDX_SIZE = 4 + 4 + 8 + 4;
+    private static final int TMP_IDX_SIZE = 4 + 8 + 4 + 8 + 4 + 4;
 
-    private static final int IDX_SIZE = 8 + 4;
+    public static final int IDX_SIZE = 8 + 4 + 8 + 4;
 
     private long batchSum;
 
@@ -62,6 +62,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         fileInputStream.close();
 
         batchItemCount = byteBuffer.getInt();
+        batchPos = byteBuffer.getLong();
         batchSize = byteBuffer.getInt();
         batchSum = byteBuffer.getLong();
         batchMax = byteBuffer.getInt();
@@ -73,6 +74,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
         ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
         byteBuffer.putInt(batchItemCount);
+        byteBuffer.putLong(batchPos);
         byteBuffer.putInt(batchSize);
         byteBuffer.putLong(batchSum);
         byteBuffer.putInt(batchMax);
@@ -85,6 +87,15 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected int batchGrow(ColumnValue.IntegerColumn integerColumn) throws IOException {
         return appendSize;
+    }
+
+    @Override
+    public ColumnIndexItem readColumnIndexItem(ByteBuffer byteBuffer) throws IOException {
+        long batchSum = byteBuffer.getLong();
+        int batchMax = byteBuffer.getInt();
+        long batchPos = byteBuffer.getLong();
+        int batchSize = byteBuffer.getInt();
+        return new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax);
     }
 
     @Override
@@ -127,6 +138,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     protected void index(DataChannel columnIndexChannel) throws IOException {
         columnIndexChannel.writeLong(batchSum);
         columnIndexChannel.writeInt(batchMax);
+        columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchSize);
 
         batchSum = 0;
@@ -134,7 +146,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList) throws IOException {
+    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnOutput.flush();
 
         List<ColumnItem<ColumnValue.IntegerColumn>> columnItemList = new ArrayList<>(timeItemList.size());
@@ -147,7 +159,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            if (columnIndexItem == null) {
+                // 半包批次
+                columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+            }
+            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -156,7 +173,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             pos++;
             while (byteBuffer.remaining() > 0) {
-                last = byteBuffer.getInt();
+                last += columnOutput.readZInt(byteBuffer);
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
                     columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(last), itemNum));
@@ -169,7 +186,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator,
+                           CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         long sum = 0;
         int validCount = 0;
         int max = Integer.MIN_VALUE;
@@ -189,13 +207,18 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         if (columnFilter == null && !batchItemList.isEmpty()) {
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
-                ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+                ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+                if (columnIndexItem == null) {
+                    // 半包批次
+                    columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                }
+                ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
                 int last = byteBuffer.getInt();
                 sum += last;
                 validCount++;
                 max = Math.max(max, last);
                 while (byteBuffer.remaining() > 0) {
-                    last = byteBuffer.getInt();
+                    last += columnOutput.readZInt(byteBuffer);
                     sum += last;
                     validCount++;
                     max = Math.max(max, last);
@@ -205,7 +228,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            ByteBuffer byteBuffer = read(batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            if (columnIndexItem == null) {
+                // 半包批次
+                columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+            }
+            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -216,7 +244,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             pos++;
             while (byteBuffer.remaining() > 0) {
-                last = byteBuffer.getInt();
+                last += columnOutput.readZInt(byteBuffer);
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(last)))) {
                     sum += last;

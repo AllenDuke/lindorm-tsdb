@@ -14,9 +14,9 @@ import java.util.stream.Collectors;
 
 public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
-    private static final int TMP_IDX_SIZE = 4 + 4;
+    private static final int TMP_IDX_SIZE = 4 + 8 + 4;
 
-    private static final int IDX_SIZE = 4;
+    public static final int IDX_SIZE = 8 + 4;
 
     private final File indexFile;
 
@@ -37,6 +37,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
         ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
         byteBuffer.putInt(batchItemCount);
+        byteBuffer.putLong(batchPos);
         byteBuffer.putInt(batchSize);
         fileOutputStream.write(byteBuffer.array());
         fileOutputStream.flush();
@@ -59,6 +60,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         fileInputStream.close();
 
         batchItemCount = byteBuffer.getInt();
+        batchPos = byteBuffer.getLong();
         batchSize = byteBuffer.getInt();
     }
 
@@ -75,11 +77,21 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     protected void index(DataChannel columnIndexChannel) throws IOException {
-        CommonUtils.writeInt(indexOutput, batchSize);
+        columnIndexChannel.writeLong(columnOutput.channelSize());
+        columnIndexChannel.writeInt(batchSize);
     }
 
     @Override
-    public ColumnValue.StringColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+    public ColumnIndexItem readColumnIndexItem(ByteBuffer byteBuffer) throws IOException {
+        long batchPos = byteBuffer.getLong();
+        int batchSize = byteBuffer.getInt();
+        StringIndexItem stringIndexItem = new StringIndexItem(-1, batchPos, batchSize);
+        return stringIndexItem;
+    }
+
+    @Override
+    public ColumnValue.StringColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator,
+                                        CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         throw new IllegalStateException("string类型不支持聚合");
 //        Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
 //        for (TimeItem timeItem : timeItemList) {
@@ -144,7 +156,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList) throws IOException {
+    public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
@@ -155,11 +167,16 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             timeItemSet.add(timeItem.getItemNum());
         }
 
-        List<StringIndexItem> indexItemList = loadAllIndex();
+//        List<StringIndexItem> indexItemList = loadAllIndex();
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
-            columnItemList.addAll(range(batchNum, indexItemList.get(batchNum.intValue()).getPos(), indexItemList.get(batchNum.intValue()).getSize(), batchTimeItemSetMap.get(batchNum)));
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            if (columnIndexItem == null) {
+                // 半包批次
+                columnIndexItem = new StringIndexItem(Math.toIntExact(batchNum), batchPos, batchSize);
+            }
+            columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum)));
         }
         return columnItemList;
     }

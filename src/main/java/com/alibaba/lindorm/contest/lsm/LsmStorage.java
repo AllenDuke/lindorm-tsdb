@@ -64,6 +64,8 @@ public class LsmStorage {
 
     private final DataChannel columnIndexChannel;
 
+    private int columnIndexItemSize;
+
     private final FileChannel metaChannel;
 
     private Long latestTime;
@@ -100,16 +102,25 @@ public class LsmStorage {
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
                     columnChannelMap.put(column.columnName, new IntChannel(dir, column));
+                    columnIndexItemSize += IntChannel.IDX_SIZE;
+                    column.indexSize = IntChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
                     columnChannelMap.put(column.columnName, new DoubleChannel(dir, column));
+                    columnIndexItemSize += DoubleChannel.IDX_SIZE;
+                    column.indexSize = DoubleChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
                     columnChannelMap.put(column.columnName, new StringChannel(dir, column));
+                    columnIndexItemSize += StringChannel.IDX_SIZE;
+                    column.indexSize = StringChannel.IDX_SIZE;
                 } else {
                     throw new IllegalStateException("无效列类型");
                 }
             }
 
             File columnIndexFile = new File(dir, "column.idx");
+            if (!columnIndexFile.exists()) {
+                columnIndexFile.createNewFile();
+            }
             columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 
             getLatestRow();
@@ -179,6 +190,42 @@ public class LsmStorage {
 //        DIRTY_LSM_STORAGE_SET.put(this, PRESENT);
     }
 
+    private Map<Long, ColumnIndexItem> loadColumnIndex(List<TimeItem> timeItemList, String columnName) throws IOException {
+        columnIndexChannel.flush();
+        Map<Long, ColumnIndexItem> columnIndexItemMap = new HashMap<>();
+        Set<Long> batchNumSet = timeItemList.stream().map(TimeItem::getBatchNum).collect(Collectors.toSet());
+        List<Long> batchNumList = batchNumSet.stream().sorted().collect(Collectors.toList());
+        long pos = batchNumList.get(0) * columnIndexItemSize;
+        int size = (int) ((batchNumList.get(batchNumList.size() - 1) - batchNumList.get(0) + 1) * columnIndexItemSize);
+        if (pos >= columnIndexChannel.channelSize()) {
+            // 这是半包批次，没有写入列索引文件，靠各列自行恢复
+            return columnIndexItemMap;
+        }
+        ByteBuffer byteBuffer = columnIndexChannel.read(pos, size);
+        int begin = 0;
+        for (TableSchema.Column column : tableSchema.getColumnList()) {
+            if (column.columnName.equals(columnName)) {
+                break;
+            }
+            begin += column.indexSize;
+        }
+        int i = 0;
+        long batchNum = batchNumList.get(i);
+        while (byteBuffer.hasRemaining()) {
+            byteBuffer.position(i * columnIndexItemSize + begin);
+            ColumnChannel columnChannel = columnChannelMap.get(columnName);
+            ColumnIndexItem columnIndexItem = columnChannel.readColumnIndexItem(byteBuffer);
+            columnIndexItemMap.put(batchNum, columnIndexItem);
+            i++;
+            if (i < batchNumList.size()) {
+                batchNum = batchNumList.get(i);
+            } else {
+                break;
+            }
+        }
+        return columnIndexItemMap;
+    }
+
     public Row agg(long l, long r, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
         if (columnTypeMap.get(columnName).equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
             throw new IllegalStateException("string类型不支持聚合");
@@ -190,7 +237,7 @@ public class LsmStorage {
         }
         List<TimeItem> batch = timeRange.stream().filter(timeItem -> timeItem.getTime() == 0).collect(Collectors.toList());
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
-        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter);
+        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, loadColumnIndex(timeRange, columnName));
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
         return new Row(vin, l, columnValueMap);
@@ -209,7 +256,7 @@ public class LsmStorage {
             ColumnChannel columnChannel = columnChannelMap.get(columnName);
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange);
+                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange, loadColumnIndex(timeRange, columnName));
                 List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
                 for (ColumnItem<ColumnValue> columnItem : columnItemList) {
                     columnValueList.add(columnItem.getItem());
@@ -238,6 +285,7 @@ public class LsmStorage {
 
     public void flush() throws IOException {
         timeChannel.flush();
+        columnIndexChannel.flush();
 
         for (ColumnChannel columnChannel : columnChannelMap.values()) {
             columnChannel.flush();
@@ -253,6 +301,9 @@ public class LsmStorage {
             allocate.flip();
             metaChannel.write(allocate, 0);
             metaChannel.close();
+
+            columnIndexChannel.flush();
+            columnIndexChannel.close();
 
             timeChannel.shutdown();
             for (ColumnChannel columnChannel : columnChannelMap.values()) {

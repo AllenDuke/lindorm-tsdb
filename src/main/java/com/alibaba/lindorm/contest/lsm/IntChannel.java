@@ -24,15 +24,24 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private int batchMax;
 
+    private int batchLastInt;
+
+    private transient int appendSize;
+
     public IntChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
-
     }
 
     @Override
     public void append0(ColumnValue.IntegerColumn integerColumn) throws IOException {
         int i = integerColumn.getIntegerValue();
-        columnOutput.writeInt(i);
+        if (batchItemCount == 0) {
+            columnOutput.writeInt(i);
+            appendSize = 4;
+        } else {
+            appendSize = columnOutput.writeZInt(i - batchLastInt);
+        }
+        batchLastInt = i;
         batchSum += i;
         batchMax = Math.max(batchMax, i);
     }
@@ -56,6 +65,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         batchSize = byteBuffer.getInt();
         batchSum = byteBuffer.getLong();
         batchMax = byteBuffer.getInt();
+        batchLastInt = byteBuffer.getInt();
     }
 
     @Override
@@ -66,6 +76,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         byteBuffer.putInt(batchSize);
         byteBuffer.putLong(batchSum);
         byteBuffer.putInt(batchMax);
+        byteBuffer.putInt(batchLastInt);
         fileOutputStream.write(byteBuffer.array());
         fileOutputStream.flush();
         fileOutputStream.close();
@@ -73,7 +84,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     protected int batchGrow(ColumnValue.IntegerColumn integerColumn) throws IOException {
-        return 4;
+        return appendSize;
     }
 
     @Override
@@ -113,12 +124,13 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    protected void index() throws IOException {
-//        CommonUtils.writeLong(indexOutput, batchSum);
-//        CommonUtils.writeInt(indexOutput, batchMax);
-//
-//        batchSum = 0;
-//        batchMax = Integer.MIN_VALUE;
+    protected void index(DataChannel columnIndexChannel) throws IOException {
+        columnIndexChannel.writeLong(batchSum);
+        columnIndexChannel.writeInt(batchMax);
+        columnIndexChannel.writeInt(batchSize);
+
+        batchSum = 0;
+        batchMax = Integer.MIN_VALUE;
     }
 
     @Override

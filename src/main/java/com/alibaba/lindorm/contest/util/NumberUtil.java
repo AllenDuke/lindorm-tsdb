@@ -49,4 +49,12 @@ public class NumberUtil {
         }
         return ints;
     }
+
+    public static int zigZagEncode(int i) {
+        return (i >> 31) ^ (i << 1);
+    }
+
+    public static int zigZagDecode(int i) {
+        return ((i >>> 1) ^ -(i & 1));
+    }
 }

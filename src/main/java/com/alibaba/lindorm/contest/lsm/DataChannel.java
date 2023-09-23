@@ -1,6 +1,7 @@
 package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
+import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -78,6 +79,23 @@ public class DataChannel {
         }
 
         nioFlushBuffer();
+    }
+
+    private void writeByte(byte b) throws IOException {
+        isDirty = true;
+        if (ioMode == 3) {
+            if (!mappedByteBuffer.hasRemaining()) {
+                // 当前已写满，向下增长
+                channelRealSize += BUFFER_SIZE;
+                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8 + channelRealSize, BUFFER_SIZE);
+            }
+            mappedByteBuffer.put(b);
+        } else if (ioMode == 2) {
+            nioCheckAndFlushBuffer();
+            lastBuffer.put(b);
+        } else {
+            outputBio.write(b);
+        }
     }
 
     private void writeBytes(byte[] b, int pos) throws IOException {
@@ -254,4 +272,44 @@ public class DataChannel {
         return allocate;
     }
 //    }
+
+    private int writeVInt(int i) throws IOException {
+        int cnt = 0;
+        while ((i & ~0x7F) != 0) {
+            writeByte((byte) ((i & 0x7F) | 0x80));
+            cnt++;
+            i >>>= 7;
+        }
+        writeByte((byte) i);
+        cnt++;
+        return cnt;
+    }
+
+    public final int writeZInt(int i) throws IOException {
+        return writeVInt(NumberUtil.zigZagEncode(i));
+    }
+
+    private int readVInt(ByteBuffer buffer) throws IOException {
+        byte b = buffer.get();
+        if (b >= 0) return b;
+        int i = b & 0x7F;
+        b = buffer.get();
+        i |= (b & 0x7F) << 7;
+        if (b >= 0) return i;
+        b = buffer.get();
+        i |= (b & 0x7F) << 14;
+        if (b >= 0) return i;
+        b = buffer.get();
+        i |= (b & 0x7F) << 21;
+        if (b >= 0) return i;
+        b = buffer.get();
+        // Warning: the next ands use 0x0F / 0xF0 - beware copy/paste errors:
+        i |= (b & 0x0F) << 28;
+        if ((b & 0xF0) == 0) return i;
+        throw new IOException("Invalid vInt detected (too many bits)");
+    }
+
+    public int readZInt(ByteBuffer buffer) throws IOException {
+        return NumberUtil.zigZagDecode(readVInt(buffer));
+    }
 }

@@ -48,7 +48,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     }
 
-    protected abstract void index() throws IOException;
+    protected abstract void index(DataChannel columnIndexChannel) throws IOException;
 
     protected abstract void recoverTmpIndex() throws IOException;
 
@@ -56,7 +56,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected abstract void shutdownTmpIndex() throws IOException;
 
-    public void append(C c) throws IOException {
+    public void append(C c, DataChannel columnIndexChannel) throws IOException {
         isDirty = true;
         append0(c);
         batchItemCount++;
@@ -64,7 +64,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         if (batchItemCount < LsmStorage.MAX_ITEM_CNT_L0) {
             return;
         }
-        index();
+        index(columnIndexChannel);
         batchItemCount = 0;
         batchSize = 0;
     }

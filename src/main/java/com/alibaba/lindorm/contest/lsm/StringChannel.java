@@ -74,7 +74,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
-    protected void index() throws IOException {
+    protected void index(DataChannel columnIndexChannel) throws IOException {
         CommonUtils.writeInt(indexOutput, batchSize);
     }
 

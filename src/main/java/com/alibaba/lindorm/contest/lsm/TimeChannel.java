@@ -110,7 +110,6 @@ public class TimeChannel {
 
         lastTime = time;
         batchItemCount++;
-        checkAndIndex();
     }
 
     public void shutdown() throws IOException {

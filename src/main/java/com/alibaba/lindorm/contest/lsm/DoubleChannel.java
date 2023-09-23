@@ -38,12 +38,13 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     @Override
-    protected void index() throws IOException {
-//        CommonUtils.writeDouble(indexOutput, batchSum);
-//        CommonUtils.writeDouble(indexOutput, batchMax);
-//
-//        batchSum = 0;
-//        batchMax = -Double.MAX_VALUE;
+    protected void index(DataChannel columnIndexChannel) throws IOException {
+        columnIndexChannel.writeDouble(batchSum);
+        columnIndexChannel.writeDouble(batchMax);
+        columnIndexChannel.writeInt(batchSize);
+
+        batchSum = 0;
+        batchMax = -Double.MAX_VALUE;
     }
 
     @Override

@@ -62,6 +62,8 @@ public class LsmStorage {
 
     private final TimeChannel timeChannel;
 
+    private final DataChannel columnIndexChannel;
+
     private final FileChannel metaChannel;
 
     private Long latestTime;
@@ -106,6 +108,10 @@ public class LsmStorage {
                     throw new IllegalStateException("无效列类型");
                 }
             }
+
+            File columnIndexFile = new File(dir, "column.idx");
+            columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+
             getLatestRow();
         } catch (IOException e) {
             e.printStackTrace();
@@ -138,15 +144,29 @@ public class LsmStorage {
         }
         latestTime = Math.max(row.getTimestamp(), latestTime);
         timeChannel.append(row.getTimestamp());
+        boolean idx = timeChannel.checkAndIndex();
+
 //        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
-        row.getColumns().forEach((k, v) -> {
+        // 按schema顺序
+        tableSchema.getColumnList().forEach(column -> {
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                columnChannelMap.get(k).append(v);
+                columnChannelMap.get(column.columnName).append(row.getColumns().get(column.columnName), columnIndexChannel);
+                if (idx) {
+                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
+
+                    }
+                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
+
+                    }
+                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
+
+                    }
+                }
 //                    countDownLatch.countDown();
             } catch (IOException e) {
                 e.printStackTrace();
-                throw new IllegalStateException(v.getColumnType() + "列插入失败");
+                throw new IllegalStateException(column.columnType + "列插入失败");
             }
 //            });
         });

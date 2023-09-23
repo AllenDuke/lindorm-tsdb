@@ -210,18 +210,16 @@ public class LsmStorage {
             begin += column.indexSize;
         }
         int i = 0;
-        long batchNum = batchNumList.get(i);
-        while (byteBuffer.hasRemaining()) {
+        while (byteBuffer.hasRemaining() && i < batchNumList.size()) {
             byteBuffer.position(i * columnIndexItemSize + begin);
+            if (!byteBuffer.hasRemaining()) {
+                i++;
+                continue;
+            }
             ColumnChannel columnChannel = columnChannelMap.get(columnName);
             ColumnIndexItem columnIndexItem = columnChannel.readColumnIndexItem(byteBuffer);
-            columnIndexItemMap.put(batchNum, columnIndexItem);
+            columnIndexItemMap.put(batchNumList.get(i), columnIndexItem);
             i++;
-            if (i < batchNumList.size()) {
-                batchNum = batchNumList.get(i);
-            } else {
-                break;
-            }
         }
         return columnIndexItemMap;
     }

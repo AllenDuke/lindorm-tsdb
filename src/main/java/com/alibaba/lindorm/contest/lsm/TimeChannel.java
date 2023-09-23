@@ -68,7 +68,7 @@ public class TimeChannel {
 
         loadAllIndexForInit();
 
-        tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.tmp");
+        tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.shutdown");
         if (tmpTimeIdxFile.exists()) {
             // shutdown时未满一批
             byte[] bytes = new byte[TMP_TIME_IDX_SIZE];

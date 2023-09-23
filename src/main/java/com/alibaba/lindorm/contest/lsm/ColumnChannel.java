@@ -41,7 +41,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 //        columnInput = new RandomAccessFile(columnFile, "r");
 
-        tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".tmp");
+        tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".shutdown");
         if (tmpIndexFile.exists()) {
             recoverTmpIndex();
             if (!tmpIndexFile.delete()) {

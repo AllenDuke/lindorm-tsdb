@@ -69,8 +69,9 @@ public class TestMyDbReadOnly {
             System.out.println((System.currentTimeMillis() - begin));
 
             tsdbEngineSample.shutdown();
-        } catch (IOException e) {
+        } catch (Throwable e) {
             System.out.println(e.getMessage());
+            tsdbEngineSample.shutdown();
         }
     }
 

@@ -333,4 +333,51 @@ public class DataChannel {
     public int readZInt(ByteBuffer buffer) throws IOException {
         return NumberUtil.zigZagDecode(readVInt(buffer));
     }
+
+    static double readZDouble(ByteBuffer buffer) throws IOException {
+        int b = buffer.get() & 0xFF;
+        if (b == 0xFF) {
+            // 负数
+            return Double.longBitsToDouble(buffer.getLong());
+        } else if (b == 0xFE) {
+            // 可以转换为float类型的
+            return Float.intBitsToFloat(buffer.getInt());
+        } else if ((b & 0x80) != 0) {
+            // 范围在[-1..124]的小整数
+            return (b & 0x7f) - 1;
+        } else {
+            // 负数double
+            long bits =
+                    ((long) b) << 56
+                            | ((buffer.getInt() & 0xFFFFFFFFL) << 24)
+                            | ((buffer.getShort() & 0xFFFFL) << 8)
+                            | (buffer.get() & 0xFFL);
+            return Double.longBitsToDouble(bits);
+        }
+    }
+
+    static void writeZDouble(DataOutput out, double d) throws IOException {
+        int intVal = (int) d;
+        final long doubleBits = Double.doubleToLongBits(d);
+        if (d == intVal && intVal >= -1 && intVal <= 0x7C && doubleBits != Double.doubleToLongBits(-0d)) {
+            // 第1种情况，可以用整数表示，且在[-1,124]: 单字节保存
+            out.writeByte((byte) (0x80 | (intVal + 1)));
+            return;
+        } else if (d == (float) d) {
+            // 第2种情况，可以用浮点数保存，写入第一个字节0xFE作为标识符
+            // 后边写入4个字节的float浮点数形式
+            out.writeByte((byte) 0xFE);
+            out.writeInt(Float.floatToIntBits((float) d));
+        } else if ((doubleBits >>> 63) == 0) {
+            // 第3种情况，其他整数，需要8个字节
+            out.writeByte((byte) (doubleBits >> 56));
+            out.writeInt((int) (doubleBits >>> 24));
+            out.writeShort((short) (doubleBits >>> 8));
+            out.writeByte((byte) (doubleBits));
+        } else {
+            // 第4种情况，其他负数，需要9个字节
+            out.writeByte((byte) 0xFF);
+            out.writeLong(doubleBits);
+        }
+    }
 }

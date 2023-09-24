@@ -53,17 +53,17 @@ public class TestMyDbReadOnly {
 
             long begin = System.currentTimeMillis();
 
-            requestedColumns = new HashSet<>(Arrays.asList( "col1"));
+            requestedColumns = new HashSet<>(Arrays.asList("col1"));
             resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 10,
                     TestMyDb.UTC + TestMyDb.ITEM_CNT));
             showResult(resultSet);
 
             resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC,
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC + TestMyDb.ITEM_CNT - 10,
                     TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.AVG, TestMyDb.ITEM_CNT / 10,
                     new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
-            System.out.println(Math.abs((double) (TestMyDb.ITEM_CNT - 1) / 2 - resultSet.get(0).getColumns().get("col1").getDoubleFloatValue()));
+            System.out.println(Math.abs((int) ((TestMyDb.ITEM_CNT - 1) * 0.1 / 2) - resultSet.get(0).getColumns().get("col2").getDoubleFloatValue()));
             showResult(resultSet);
 
             resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",

@@ -275,10 +275,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             pos++;
             while (byteBuffer.remaining() > 0) {
-                last += columnOutput.readZInt(byteBuffer);
+                int cur = last - lastPre + last + columnOutput.readZInt(byteBuffer);
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(last)))) {
-                    int cur = last - lastPre + last + columnOutput.readZInt(byteBuffer);
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);

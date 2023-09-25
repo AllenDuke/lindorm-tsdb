@@ -156,6 +156,31 @@ public class DataChannel {
         }
     }
 
+    public void writeShort(short s) throws IOException {
+        size += 2;
+        isDirty = true;
+        if (ioMode == 3) {
+            if (mappedByteBuffer.remaining() >= 2) {
+                mappedByteBuffer.putShort(s);
+            } else {
+                byte[] b = new byte[2];
+                UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, s, true);
+                writeBytes(b, 0);
+            }
+        } else if (ioMode == 2) {
+            if (lastBuffer.remaining() >= 2) {
+                lastBuffer.putShort(s);
+            } else {
+                byte[] b = new byte[2];
+                UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, s, true);
+                writeBytes(b, 0);
+            }
+            nioCheckAndFlushBuffer();
+        } else {
+            CommonUtils.writeShort(outputBio, s);
+        }
+    }
+
     public void writeInt(int i) throws IOException {
         size += 4;
         isDirty = true;
@@ -182,17 +207,18 @@ public class DataChannel {
     }
 
     public void writeDouble(double d) throws IOException {
-        size += 8;
         isDirty = true;
         if (ioMode == 3) {
             if (mappedByteBuffer.remaining() >= 8) {
                 mappedByteBuffer.putDouble(d);
+                size += 8;
             } else {
                 writeLong(Double.doubleToLongBits(d));
             }
         } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putDouble(d);
+                size += 8;
             } else {
                 writeLong(Double.doubleToLongBits(d));
             }
@@ -334,7 +360,7 @@ public class DataChannel {
         return NumberUtil.zigZagDecode(readVInt(buffer));
     }
 
-    static double readZDouble(ByteBuffer buffer) throws IOException {
+    public double readZDouble(ByteBuffer buffer) throws IOException {
         int b = buffer.get() & 0xFF;
         if (b == 0xFF) {
             // 负数
@@ -356,28 +382,36 @@ public class DataChannel {
         }
     }
 
-    static void writeZDouble(DataOutput out, double d) throws IOException {
+    public int writeZDouble(double d) throws IOException {
         int intVal = (int) d;
         final long doubleBits = Double.doubleToLongBits(d);
         if (d == intVal && intVal >= -1 && intVal <= 0x7C && doubleBits != Double.doubleToLongBits(-0d)) {
             // 第1种情况，可以用整数表示，且在[-1,124]: 单字节保存
-            out.writeByte((byte) (0x80 | (intVal + 1)));
-            return;
+            writeByte((byte) (0x80 | (intVal + 1)));
+            size += 1;
+            return 1;
         } else if (d == (float) d) {
             // 第2种情况，可以用浮点数保存，写入第一个字节0xFE作为标识符
             // 后边写入4个字节的float浮点数形式
-            out.writeByte((byte) 0xFE);
-            out.writeInt(Float.floatToIntBits((float) d));
+            writeByte((byte) 0xFE);
+            size += 1;
+            writeInt(Float.floatToIntBits((float) d));
+            return 5;
         } else if ((doubleBits >>> 63) == 0) {
             // 第3种情况，其他整数，需要8个字节
-            out.writeByte((byte) (doubleBits >> 56));
-            out.writeInt((int) (doubleBits >>> 24));
-            out.writeShort((short) (doubleBits >>> 8));
-            out.writeByte((byte) (doubleBits));
+            writeByte((byte) (doubleBits >> 56));
+            size += 1;
+            writeInt((int) (doubleBits >>> 24));
+            writeShort((short) (doubleBits >>> 8));
+            writeByte((byte) (doubleBits));
+            size += 1;
+            return 8;
         } else {
             // 第4种情况，其他负数，需要9个字节
-            out.writeByte((byte) 0xFF);
-            out.writeLong(doubleBits);
+            writeByte((byte) 0xFF);
+            size += 1;
+            writeLong(doubleBits);
+            return 9;
         }
     }
 }

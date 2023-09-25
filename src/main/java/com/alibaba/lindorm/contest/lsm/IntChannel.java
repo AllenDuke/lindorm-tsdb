@@ -281,9 +281,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);
-                    lastPre = last;
-                    last = cur;
                 }
+                lastPre = last;
+                last = cur;
                 pos++;
             }
         }

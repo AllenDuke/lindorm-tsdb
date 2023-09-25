@@ -9,10 +9,14 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
+
+    public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
+    public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 4;
 
@@ -36,6 +40,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     public void append0(ColumnValue.IntegerColumn integerColumn) throws IOException {
+        ORIG_SIZE.getAndAdd(4);
         int i = integerColumn.getIntegerValue();
         if (batchItemCount == 0 || batchItemCount == 1) {
             columnOutput.writeInt(i);
@@ -43,6 +48,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         } else {
             appendSize = columnOutput.writeZInt(i - batchLastInt - (batchLastInt - batchLastIntPre));
         }
+        REAL_SIZE.getAndAdd(appendSize);
         batchLastIntPre = batchLastInt;
         batchLastInt = i;
         batchSum += i;
@@ -277,7 +283,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             while (byteBuffer.remaining() > 0) {
                 int cur = last - lastPre + last + columnOutput.readZInt(byteBuffer);
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(last)))) {
+                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(cur)))) {
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);

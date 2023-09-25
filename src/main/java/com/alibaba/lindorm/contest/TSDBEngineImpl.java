@@ -7,6 +7,7 @@
 
 package com.alibaba.lindorm.contest;
 
+import com.alibaba.lindorm.contest.lsm.IntChannel;
 import com.alibaba.lindorm.contest.lsm.LsmStorage;
 import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
@@ -196,6 +197,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             columnsType.clear();
             tableSchema = null;
             connected = false;
+            System.out.println("int列原大小：" + IntChannel.ORIG_SIZE.get() + "，实际大小：" + IntChannel.REAL_SIZE.get() + "，压缩率：" + (double) IntChannel.REAL_SIZE.get() / IntChannel.ORIG_SIZE.get());
             System.out.println("shutdown done");
         } catch (Throwable throwable) {
             System.out.println("shutdown failed.");

@@ -11,17 +11,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> {
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 8 + 8;
 
-    public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
-    public static final AtomicLong REAL_SIZE = new AtomicLong(0);
-
-    private static final int TMP_IDX_SIZE = 4 + 8 + 4 + 8 + 8 + 8 + 8;
+    private static final int TMP_IDX_SIZE = 4 + 8 + 4 + 8 + 8;
 
     public static final int IDX_SIZE = 8 + 8 + 8 + 4;
 
@@ -29,26 +25,14 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private double batchMax;
 
-    private double batchLastDouble;
-
-    private transient int appendSize;
-
     public DoubleChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
     }
 
     @Override
     public void append0(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
-        ORIG_SIZE.getAndAdd(8);
         double v = doubleFloatColumn.getDoubleFloatValue();
-        if (batchItemCount == 0) {
-            columnOutput.writeDouble(v);
-            appendSize = 8;
-        } else {
-            appendSize = columnOutput.writeZDouble(v - batchLastDouble);
-        }
-        REAL_SIZE.getAndAdd(appendSize);
-        batchLastDouble = v;
+        columnOutput.writeDouble(v);
         batchSum += v;
         batchMax = Math.max(batchMax, v);
     }
@@ -94,7 +78,6 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         batchSize = byteBuffer.getInt();
         batchSum = byteBuffer.getDouble();
         batchMax = byteBuffer.getDouble();
-        batchLastDouble = byteBuffer.getDouble();
     }
 
     @Override
@@ -106,7 +89,6 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         byteBuffer.putInt(batchSize);
         byteBuffer.putDouble(batchSum);
         byteBuffer.putDouble(batchMax);
-        byteBuffer.putDouble(batchLastDouble);
         fileOutputStream.write(byteBuffer.array());
         fileOutputStream.flush();
         fileOutputStream.close();
@@ -114,7 +96,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     protected int batchGrow(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
-        return appendSize;
+        return 8;
     }
 
     @Override
@@ -181,13 +163,12 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             pos++;
             while (byteBuffer.remaining() > 0) {
-                double cur = last + columnOutput.readZDouble(byteBuffer);
+                last = byteBuffer.getDouble();
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
-                    columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(cur), itemNum));
+                    columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(last), itemNum));
                 }
                 pos++;
-                last = cur;
             }
         }
         return columnItemList;
@@ -226,13 +207,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 sum += last;
                 validCount++;
                 max = Math.max(last, max);
-
                 while (byteBuffer.remaining() > 0) {
-                    double cur = last + columnOutput.readZDouble(byteBuffer);
-                    sum += cur;
+                    last = byteBuffer.getDouble();
+                    sum += last;
                     validCount++;
                     max = Math.max(last, max);
-                    last = cur;
                 }
             }
         }
@@ -255,14 +234,14 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             pos++;
             while (byteBuffer.remaining() > 0) {
-                double cur =  last + columnOutput.readZDouble(byteBuffer);
+                last = byteBuffer.getDouble();
                 itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.DoubleFloatColumn(cur)))) {
+                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.DoubleFloatColumn(last)))) {
                     sum += last;
                     validCount++;
                     max = Math.max(last, max);
+
                 }
-                last = cur;
                 pos++;
             }
         }

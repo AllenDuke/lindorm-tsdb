@@ -21,6 +21,7 @@
 
 import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
+import com.alibaba.lindorm.contest.lsm.LsmStorage;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.File;
@@ -54,10 +55,17 @@ public class TestMyDbReadOnly {
             long begin = System.currentTimeMillis();
 
             requestedColumns = new HashSet<>(Arrays.asList("col1"));
-            resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 10,
-                    TestMyDb.UTC + TestMyDb.ITEM_CNT));
-            showResult(resultSet);
+            for (int i = 0; i < TestMyDb.ITEM_CNT / LsmStorage.MAX_ITEM_CNT_L0; i++) {
+                resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
+                        new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + LsmStorage.MAX_ITEM_CNT_L0 * i,
+                        TestMyDb.UTC + LsmStorage.MAX_ITEM_CNT_L0 * (i + 1)));
+                for (int j = 0; j < resultSet.size(); j++) {
+                    if (LsmStorage.MAX_ITEM_CNT_L0 * i + j != resultSet.get(j).getColumns().get("col1").getIntegerValue()) {
+                        System.out.println("err");
+                    }
+                }
+            }
+//            showResult(resultSet);
 
             resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC,

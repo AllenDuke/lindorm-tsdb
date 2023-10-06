@@ -7,6 +7,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
 import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
@@ -51,7 +53,7 @@ public class DataChannel {
                 mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8, BUFFER_SIZE);
             }
         } else if (this.ioMode == 2) {
-            outputNio = new FileOutputStream(dataFile, true).getChannel();
+            outputNio = new RandomAccessFile(dataFile, "rw").getChannel();
             size = outputNio.size();
 //            inputNio = new FileInputStream(dataFile).getChannel();
 //            inputBioStream = new FileInputStream(dataFile); 
@@ -65,12 +67,60 @@ public class DataChannel {
         }
     }
 
+    public int batchGzip(long batchPos, int batchSize) throws IOException {
+        ByteBuffer read = this.read(batchPos, batchSize);
+        size -= read.limit();
+        byte[] bytes = gZip(read.array());
+        size += bytes.length;
+        outputNio.position(batchPos);
+        outputNio.write(ByteBuffer.wrap(bytes));
+        return bytes.length;
+    }
+
+    private byte[] gZip(byte[] data) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        GZIPOutputStream gzip = new GZIPOutputStream(bos);
+        byte[] b = null;
+        gzip.write(data);
+        gzip.finish();
+        b = bos.toByteArray();
+        bos.close();
+        gzip.close();
+        return b;
+    }
+
+    /***
+     * 解压GZip
+     *
+     * @param data
+     * @return
+     */
+    public byte[] unGZip(byte[] data) throws IOException {
+        byte[] b = null;
+
+        ByteArrayInputStream bis = new ByteArrayInputStream(data);
+        GZIPInputStream gzip = new GZIPInputStream(bis);
+        byte[] buf = new byte[1024];
+        int num = -1;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        while ((num = gzip.read(buf, 0, buf.length)) != -1) {
+            baos.write(buf, 0, num);
+        }
+        b = baos.toByteArray();
+        baos.flush();
+        baos.close();
+        gzip.close();
+        bis.close();
+        return b;
+    }
+
     private void nioFlushBuffer() throws IOException {
         lastBuffer.flip();
         int written = 0;
         while (written < lastBuffer.limit()) {
-            written += outputNio.write(lastBuffer);
+            written += outputNio.write(lastBuffer, outputNio.position());
         }
+        outputNio.position(outputNio.position() + written);
         lastBuffer.clear();
     }
 

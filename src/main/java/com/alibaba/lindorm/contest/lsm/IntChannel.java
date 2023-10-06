@@ -48,7 +48,6 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         } else {
             appendSize = columnOutput.writeZInt(i - batchLastInt - (batchLastInt - batchLastIntPre));
         }
-        REAL_SIZE.getAndAdd(appendSize);
         batchLastIntPre = batchLastInt;
         batchLastInt = i;
         batchSum += i;
@@ -147,13 +146,18 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     protected void index(DataChannel columnIndexChannel) throws IOException {
+        columnOutput.flush();
+        int batchGzipSize = columnOutput.batchGzip(batchPos, batchSize);
+
         columnIndexChannel.writeLong(batchSum);
         columnIndexChannel.writeInt(batchMax);
         columnIndexChannel.writeLong(batchPos);
-        columnIndexChannel.writeInt(batchSize);
+        columnIndexChannel.writeInt(batchGzipSize);
 
         batchSum = 0;
         batchMax = Integer.MIN_VALUE;
+
+        REAL_SIZE.getAndAdd(batchGzipSize);
     }
 
     @Override
@@ -171,11 +175,16 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            boolean zipped = true;
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                zipped = false;
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            if (zipped) {
+                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+            }
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
@@ -228,11 +237,16 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
                 ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+                boolean zipped = true;
                 if (columnIndexItem == null) {
                     // 半包批次
                     columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                    zipped = false;
                 }
                 ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+                if (zipped) {
+                    byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+                }
                 int last = byteBuffer.getInt();
                 sum += last;
                 validCount++;
@@ -257,11 +271,16 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            boolean zipped = true;
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                zipped = false;
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            if (zipped) {
+                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+            }
             int pos = 0;
             int last = byteBuffer.getInt();
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;

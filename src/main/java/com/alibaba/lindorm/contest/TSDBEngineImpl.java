@@ -199,7 +199,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             tableSchema = null;
             connected = false;
             System.out.println("int列原大小：" + IntChannel.ORIG_SIZE.get() + "，实际大小：" + IntChannel.REAL_SIZE.get() + "，压缩率：" + (double) IntChannel.REAL_SIZE.get() / IntChannel.ORIG_SIZE.get());
-            System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());
+//            System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());
             System.out.println("shutdown done");
         } catch (Throwable throwable) {
             System.out.println("shutdown failed.");

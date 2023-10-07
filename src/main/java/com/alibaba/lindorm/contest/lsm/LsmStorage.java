@@ -75,6 +75,8 @@ public class LsmStorage {
      */
     private Row latestRow;
 
+    private Map<String, Map<Long, ColumnIndexItem>> columnIndexMap = new HashMap<>();
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
 //        initColumnExecutor(tableSchema.getColumnList().size());
 //        initColumnFlusher(tableSchema.getColumnList().size());
@@ -124,6 +126,8 @@ public class LsmStorage {
             columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 
             getLatestRow();
+
+            loadAllColumnIndexForInit();
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException("LsmStorage初始化失败");
@@ -162,7 +166,7 @@ public class LsmStorage {
         tableSchema.getColumnList().forEach(column -> {
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                columnChannelMap.get(column.columnName).append(row.getColumns().get(column.columnName), columnIndexChannel);
+                columnChannelMap.get(column.columnName).append(row.getColumns().get(column.columnName), columnIndexChannel, columnIndexMap.get(column.columnName));
                 if (idx) {
                     if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
 
@@ -188,6 +192,19 @@ public class LsmStorage {
 //        }
 
 //        DIRTY_LSM_STORAGE_SET.put(this, PRESENT);
+    }
+
+    private void loadAllColumnIndexForInit() throws IOException {
+        Set<String> columnNameSet = columnChannelMap.keySet();
+        List<TimeIndexItem> timeIndexItemList = timeChannel.loadAllIndexForInit();
+        List<TimeItem> timeItemList = new ArrayList<>();
+        int indexItemCount = timeIndexItemList.size();
+        for (int i = 0; i < indexItemCount; i++) {
+            timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * i));
+        }
+        for (String columnName : columnNameSet) {
+            columnIndexMap.put(columnName, loadColumnIndex(timeItemList, columnName));
+        }
     }
 
     private Map<Long, ColumnIndexItem> loadColumnIndex(List<TimeItem> timeItemList, String columnName) throws IOException {
@@ -337,5 +354,14 @@ public class LsmStorage {
 
     public long getTimeIndexFileSize() {
         return timeChannel.getIndexFileSize();
+    }
+
+    public long getColumnIndexFileSize() {
+        try {
+            return columnIndexChannel.channelSize();
+        } catch (IOException e) {
+            System.out.println("getColumnIndexFileSize failed.");
+            return 0;
+        }
     }
 }

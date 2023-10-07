@@ -51,7 +51,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     }
 
-    protected abstract void index(DataChannel columnIndexChannel) throws IOException;
+    protected abstract void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
     protected abstract void recoverTmpIndex() throws IOException;
 
@@ -59,7 +59,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected abstract void shutdownTmpIndex() throws IOException;
 
-    public void append(C c, DataChannel columnIndexChannel) throws IOException {
+    public void append(C c, DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         isDirty = true;
         append0(c);
         batchItemCount++;
@@ -67,7 +67,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         if (batchItemCount < LsmStorage.MAX_ITEM_CNT_L0) {
             return;
         }
-        index(columnIndexChannel);
+        index(columnIndexChannel, columnIndexItemMap);
         batchPos = columnOutput.channelSize();
         batchItemCount = 0;
         batchSize = 0;

@@ -48,6 +48,8 @@ public class TimeChannel {
 
     private boolean isDirty;
 
+    private boolean loadedAllIndexForInit;
+
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
         if (!timeFile.exists()) {
@@ -174,7 +176,10 @@ public class TimeChannel {
         return true;
     }
 
-    private void loadAllIndexForInit() throws IOException {
+    public List<TimeIndexItem> loadAllIndexForInit() throws IOException {
+        if (loadedAllIndexForInit) {
+            return timeIndexItemList;
+        }
         timeIndexItemList.clear();
         FileInputStream fileInputStream = new FileInputStream(timeIdxFile);
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) timeIdxFile.length());
@@ -193,6 +198,8 @@ public class TimeChannel {
             long maxTime = byteBuffer.getLong();
             timeIndexItemList.add(new TimeIndexItem(minTime, maxTime));
         }
+        loadedAllIndexForInit = true;
+        return timeIndexItemList;
     }
 
     public List<TimeItem> agg(long l, long r) throws IOException {

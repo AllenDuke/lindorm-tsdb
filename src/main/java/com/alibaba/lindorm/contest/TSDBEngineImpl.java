@@ -162,6 +162,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
 
             AtomicLong timeIndexFileSize = new AtomicLong(0);
+            AtomicLong columnIndexFileSize = new AtomicLong(0);
             CountDownLatch countDownLatch = new CountDownLatch(LSM_STORAGES.size());
             ThreadPoolExecutor shutdownExecutor = new ThreadPoolExecutor(100, 100, 3L, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(10000), new ThreadPoolExecutor.CallerRunsPolicy());
@@ -170,6 +171,7 @@ public class TSDBEngineImpl extends TSDBEngine {
                     ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantReadWriteLock());
                     lock.writeLock().lock();
                     timeIndexFileSize.getAndAdd(lsmStorage.getTimeIndexFileSize());
+                    columnIndexFileSize.getAndAdd(lsmStorage.getColumnIndexFileSize());
                     lsmStorage.shutdown();
                     lock.writeLock().unlock();
                     countDownLatch.countDown();
@@ -180,7 +182,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
 
-            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get() + "B");
+            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get() / 1000 + "KB");
+            System.out.println("shutdown column索引总大小：" + columnIndexFileSize.get() / 1000 + "KB");
 
             // Persist the schema.
             try {

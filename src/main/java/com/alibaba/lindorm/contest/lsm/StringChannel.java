@@ -76,9 +76,11 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
-    protected void index(DataChannel columnIndexChannel) throws IOException {
+    protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchSize);
+
+        columnIndexItemMap.put((long) columnIndexItemMap.size(), new StringIndexItem(-1, batchPos, batchSize));
     }
 
     @Override

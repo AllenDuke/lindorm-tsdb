@@ -136,11 +136,11 @@ public class TimeChannel {
 //        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
         // shutdown时保存索引文件
-        for (int i = loadedAllIndexForInit; i < timeIndexItemList.size(); i++) {
-            TimeIndexItem timeIndexItem = timeIndexItemList.get(i);
-            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
-            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
-        }
+//        for (int i = loadedAllIndexForInit; i < timeIndexItemList.size(); i++) {
+//            TimeIndexItem timeIndexItem = timeIndexItemList.get(i);
+//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
+//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+//        }
         timeIndexOutput.flush();
         timeIndexOutput.close();
 
@@ -159,8 +159,8 @@ public class TimeChannel {
     private void index() throws IOException {
         // 输出主键稀疏索引 todo maxTime_delta, delta_bf
         TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
-//        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
-//        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
+        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
     }

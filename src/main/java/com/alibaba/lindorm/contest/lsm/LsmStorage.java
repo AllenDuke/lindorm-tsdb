@@ -328,24 +328,24 @@ public class LsmStorage {
             metaChannel.write(allocate, 0);
             metaChannel.close();
 
-            long dirtyColumnIndexItemNum = loadedAllColumnIndexForInit;
-            while (true) {
-                if (tableSchema.getColumnList().isEmpty()) {
-                    break;
-                }
-                for (TableSchema.Column column : tableSchema.getColumnList()) {
-                    Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
-                    ColumnIndexItem columnIndexItem = columnIndexItemMap.get(dirtyColumnIndexItemNum++);
-                    if (columnIndexItem == null) {
-                        dirtyColumnIndexItemNum = -1;
-                        break;
-                    }
-                    columnIndexChannel.writeBytes(columnIndexItem.toBytes());
-                }
-                if (dirtyColumnIndexItemNum == -1) {
-                    break;
-                }
-            }
+//            long dirtyColumnIndexItemNum = loadedAllColumnIndexForInit;
+//            while (true) {
+//                if (tableSchema.getColumnList().isEmpty()) {
+//                    break;
+//                }
+//                for (TableSchema.Column column : tableSchema.getColumnList()) {
+//                    Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
+//                    ColumnIndexItem columnIndexItem = columnIndexItemMap.get(dirtyColumnIndexItemNum++);
+//                    if (columnIndexItem == null) {
+//                        dirtyColumnIndexItemNum = -1;
+//                        break;
+//                    }
+//                    columnIndexChannel.writeBytes(columnIndexItem.toBytes());
+//                }
+//                if (dirtyColumnIndexItemNum == -1) {
+//                    break;
+//                }
+//            }
             columnIndexChannel.flush();
             columnIndexChannel.close();
 

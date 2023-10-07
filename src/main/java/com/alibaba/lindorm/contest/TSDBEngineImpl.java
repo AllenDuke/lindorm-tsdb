@@ -7,23 +7,22 @@
 
 package com.alibaba.lindorm.contest;
 
-import com.alibaba.lindorm.contest.lsm.DoubleChannel;
 import com.alibaba.lindorm.contest.lsm.IntChannel;
 import com.alibaba.lindorm.contest.lsm.LsmStorage;
 import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
-import moe.cnkirito.kdio.DirectIOLib;
 
 import java.io.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
-    public static DirectIOLib directIOLib;
+//    public static DirectIOLib directIOLib;
 
     static {
         System.out.println(Runtime.getRuntime().totalMemory() / 1024 / 1024 / 1024 + "GB");
@@ -78,7 +77,7 @@ public class TSDBEngineImpl extends TSDBEngine {
      */
     public TSDBEngineImpl(File dataPath) {
         super(dataPath);
-        directIOLib = DirectIOLib.getLibForPath(dataPath.getAbsolutePath());
+//        directIOLib = DirectIOLib.getLibForPath(dataPath.getAbsolutePath());
     }
 
     @Override

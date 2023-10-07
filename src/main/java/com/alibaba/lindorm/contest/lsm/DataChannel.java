@@ -2,10 +2,6 @@ package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.util.NumberUtil;
-import moe.cnkirito.kdio.DirectChannel;
-import moe.cnkirito.kdio.DirectIOLib;
-import moe.cnkirito.kdio.DirectIOUtils;
-import moe.cnkirito.kdio.DirectRandomAccessFile;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -16,7 +12,6 @@ import java.util.zip.GZIPOutputStream;
 
 import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
 import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
-import static com.alibaba.lindorm.contest.TSDBEngineImpl.directIOLib;
 
 public class DataChannel {
 
@@ -35,7 +30,7 @@ public class DataChannel {
 
     private ByteBuffer lastBuffer;
 
-    private DirectRandomAccessFile directRandomAccessFile;
+//    private DirectRandomAccessFile directRandomAccessFile;
     private MappedByteBuffer mappedByteBuffer;
     private long channelRealSize;
 
@@ -51,8 +46,8 @@ public class DataChannel {
         this.dataFile = dataFile;
         inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
         if (this.ioMode == 3) {
-            directRandomAccessFile = new DirectRandomAccessFile(dataFile, "rw");
-            lastBuffer = DirectIOUtils.allocateForDirectIO(directIOLib, BUFFER_SIZE);
+//            directRandomAccessFile = new DirectRandomAccessFile(dataFile, "rw");
+//            lastBuffer = DirectIOUtils.allocateForDirectIO(directIOLib, BUFFER_SIZE);
             size = outputNio.size();
         } else if (this.ioMode == 2) {
             outputNio = new RandomAccessFile(dataFile, "rw").getChannel();
@@ -124,7 +119,7 @@ public class DataChannel {
                 written += outputNio.write(lastBuffer, outputNio.position());
             }
             if (ioMode == 3) {
-                written += directRandomAccessFile.write(lastBuffer, outputNio.position());
+//                written += directRandomAccessFile.write(lastBuffer, outputNio.position());
             }
         }
         outputNio.position(outputNio.position() + written);
@@ -329,7 +324,7 @@ public class DataChannel {
     public void close() throws IOException {
         if (ioMode == 3) {
 //            channel.truncate(channelRealSize + 8);
-            directRandomAccessFile.close();
+//            directRandomAccessFile.close();
             return;
         }
         if (ioMode == 2) {
@@ -349,8 +344,8 @@ public class DataChannel {
     protected ByteBuffer read(long pos, int size) throws IOException {
         if (ioMode == 3) {
             ByteBuffer allocate = ByteBuffer.allocate(size);
-            int read = directRandomAccessFile.read(allocate, pos);
-            allocate.limit(read);
+//            int read = directRandomAccessFile.read(allocate, pos);
+//            allocate.limit(read);
             return allocate;
         }
 

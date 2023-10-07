@@ -10,8 +10,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class TimeChannel {
+
+    public static AtomicLong IDX_LOG_CNT = new AtomicLong(0);
+    public static AtomicLong IDX_CNT = new AtomicLong(0);
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 2 + 8;
 
@@ -49,6 +53,8 @@ public class TimeChannel {
     private boolean isDirty;
 
     private int loadedAllIndexForInit = -1;
+
+    private long delta;
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -110,6 +116,8 @@ public class TimeChannel {
         // todo 变长编码
         timeOutput.writeShort((short) (time - lastTime));
 
+        delta += (short) (time - lastTime);
+
         lastTime = time;
         batchItemCount++;
     }
@@ -163,6 +171,16 @@ public class TimeChannel {
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
+
+        if (IDX_CNT.get() > 4000L * IDX_LOG_CNT.get()) {
+            if (IDX_LOG_CNT.compareAndSet(IDX_LOG_CNT.get(), IDX_LOG_CNT.get() + 1)) {
+                System.out.println("avg delta time:" + delta / (LsmStorage.MAX_ITEM_CNT_L0 - 1));
+            }
+        }
+
+        IDX_CNT.incrementAndGet();
+
+        delta = 0;
     }
 
     /**

@@ -17,7 +17,7 @@ public class LsmStorage {
     /**
      * 每8k数据为一块
      */
-    public static final int MAX_ITEM_CNT_L0 = 16 * 1024;
+    public static final int MAX_ITEM_CNT_L0 = 8 * 1024;
 
     public static final int OUTPUT_BUFFER_SIZE = 8 * 1024;
 

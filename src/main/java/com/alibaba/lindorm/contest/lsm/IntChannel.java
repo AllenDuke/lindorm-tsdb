@@ -238,35 +238,42 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         if (columnFilter == null && !batchItemList.isEmpty()) {
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
-                ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+                IntIndexItem columnIndexItem = (IntIndexItem) columnIndexItemMap.get(batchNum);
                 boolean zipped = true;
                 if (columnIndexItem == null) {
                     // 半包批次
                     columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
                     zipped = false;
+                    validCount += batchItemCount;
+                } else {
+                    validCount += LsmStorage.MAX_ITEM_CNT_L0;
                 }
-                ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
-                if (zipped) {
-                    byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
-                }
-                int last = byteBuffer.getInt();
-                sum += last;
-                validCount++;
-                max = Math.max(max, last);
 
-                int lastPre = last;
-                last = byteBuffer.getInt();
-                sum += last;
-                validCount++;
-                max = Math.max(max, last);
-                while (byteBuffer.remaining() > 0) {
-                    int cur = last - lastPre + last + columnOutput.readZInt(byteBuffer);
-                    sum += cur;
-                    validCount++;
-                    max = Math.max(max, cur);
-                    lastPre = last;
-                    last = cur;
-                }
+                sum += columnIndexItem.getBatchSum();
+                max = Math.max(max, columnIndexItem.getBatchMax());
+
+//                ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+//                if (zipped) {
+//                    byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+//                }
+//                int last = byteBuffer.getInt();
+//                sum += last;
+//                validCount++;
+//                max = Math.max(max, last);
+//
+//                int lastPre = last;
+//                last = byteBuffer.getInt();
+//                sum += last;
+//                validCount++;
+//                max = Math.max(max, last);
+//                while (byteBuffer.remaining() > 0) {
+//                    int cur = last - lastPre + last + columnOutput.readZInt(byteBuffer);
+//                    sum += cur;
+//                    validCount++;
+//                    max = Math.max(max, cur);
+//                    lastPre = last;
+//                    last = cur;
+//                }
             }
         }
 

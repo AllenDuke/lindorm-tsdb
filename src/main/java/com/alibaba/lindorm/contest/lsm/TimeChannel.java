@@ -135,6 +135,11 @@ public class TimeChannel {
 
 //        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
+        // shutdown时保存索引文件
+//        for (TimeIndexItem timeIndexItem : timeIndexItemList) {
+//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
+//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+//        }
         timeIndexOutput.flush();
         timeIndexOutput.close();
 

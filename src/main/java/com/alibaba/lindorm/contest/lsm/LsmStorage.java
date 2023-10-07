@@ -125,9 +125,9 @@ public class LsmStorage {
             }
             columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 
-            getLatestRow();
-
             loadAllColumnIndexForInit();
+
+            getLatestRow();
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException("LsmStorage初始化失败");
@@ -212,6 +212,10 @@ public class LsmStorage {
         Map<Long, ColumnIndexItem> columnIndexItemMap = new HashMap<>();
         Set<Long> batchNumSet = timeItemList.stream().map(TimeItem::getBatchNum).collect(Collectors.toSet());
         List<Long> batchNumList = batchNumSet.stream().sorted().collect(Collectors.toList());
+        if (batchNumList.isEmpty()) {
+            // 还没有数据
+            return columnIndexItemMap;
+        }
         long pos = batchNumList.get(0) * columnIndexItemSize;
         int size = (int) ((batchNumList.get(batchNumList.size() - 1) - batchNumList.get(0) + 1) * columnIndexItemSize);
         if (pos >= columnIndexChannel.channelSize()) {
@@ -253,7 +257,7 @@ public class LsmStorage {
         }
         List<TimeItem> batch = timeRange.stream().filter(timeItem -> timeItem.getTime() == 0).collect(Collectors.toList());
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
-        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, loadColumnIndex(timeRange, columnName));
+        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, columnIndexMap.get(columnName));
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
         return new Row(vin, l, columnValueMap);
@@ -272,7 +276,7 @@ public class LsmStorage {
             ColumnChannel columnChannel = columnChannelMap.get(columnName);
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange, loadColumnIndex(timeRange, columnName));
+                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange, columnIndexMap.get(columnName));
                 List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
                 for (ColumnItem<ColumnValue> columnItem : columnItemList) {
                     columnValueList.add(columnItem.getItem());

@@ -199,22 +199,29 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         if (columnFilter == null && !batchItemList.isEmpty()) {
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
-                ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+                DoubleIndexItem columnIndexItem = (DoubleIndexItem) columnIndexItemMap.get(batchNum);
                 if (columnIndexItem == null) {
                     // 半包批次
                     columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                    validCount += batchItemCount;
+                } else {
+                    validCount += LsmStorage.MAX_ITEM_CNT_L0;
                 }
-                ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
-                double last = byteBuffer.getDouble();
-                sum += last;
-                validCount++;
-                max = Math.max(last, max);
-                while (byteBuffer.remaining() > 0) {
-                    last = byteBuffer.getDouble();
-                    sum += last;
-                    validCount++;
-                    max = Math.max(last, max);
-                }
+
+                sum += columnIndexItem.getBatchSum();
+                max = Math.max(max, columnIndexItem.getBatchMax());
+
+//                ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+//                double last = byteBuffer.getDouble();
+//                sum += last;
+//                validCount++;
+//                max = Math.max(last, max);
+//                while (byteBuffer.remaining() > 0) {
+//                    last = byteBuffer.getDouble();
+//                    sum += last;
+//                    validCount++;
+//                    max = Math.max(last, max);
+//                }
             }
         }
 

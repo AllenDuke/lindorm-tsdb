@@ -48,7 +48,7 @@ public class TimeChannel {
 
     private boolean isDirty;
 
-    private boolean loadedAllIndexForInit;
+    private int loadedAllIndexForInit = -1;
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
@@ -136,10 +136,11 @@ public class TimeChannel {
 //        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
 
         // shutdown时保存索引文件
-//        for (TimeIndexItem timeIndexItem : timeIndexItemList) {
-//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
-//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
-//        }
+        for (int i = loadedAllIndexForInit; i < timeIndexItemList.size(); i++) {
+            TimeIndexItem timeIndexItem = timeIndexItemList.get(i);
+            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
+            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+        }
         timeIndexOutput.flush();
         timeIndexOutput.close();
 
@@ -158,8 +159,8 @@ public class TimeChannel {
     private void index() throws IOException {
         // 输出主键稀疏索引 todo maxTime_delta, delta_bf
         TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
-        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
-        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+//        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
+//        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
     }
@@ -182,7 +183,7 @@ public class TimeChannel {
     }
 
     public List<TimeIndexItem> loadAllIndexForInit() throws IOException {
-        if (loadedAllIndexForInit) {
+        if (loadedAllIndexForInit != -1) {
             return timeIndexItemList;
         }
         timeIndexItemList.clear();
@@ -203,7 +204,7 @@ public class TimeChannel {
             long maxTime = byteBuffer.getLong();
             timeIndexItemList.add(new TimeIndexItem(minTime, maxTime));
         }
-        loadedAllIndexForInit = true;
+        loadedAllIndexForInit = timeIndexItemList.size();
         return timeIndexItemList;
     }
 

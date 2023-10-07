@@ -77,6 +77,8 @@ public class LsmStorage {
 
     private Map<String, Map<Long, ColumnIndexItem>> columnIndexMap = new HashMap<>();
 
+    private int loadedAllColumnIndexForInit = -1;
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
 //        initColumnExecutor(tableSchema.getColumnList().size());
 //        initColumnFlusher(tableSchema.getColumnList().size());
@@ -195,6 +197,9 @@ public class LsmStorage {
     }
 
     private void loadAllColumnIndexForInit() throws IOException {
+        if (loadedAllColumnIndexForInit != -1) {
+            return;
+        }
         Set<String> columnNameSet = columnChannelMap.keySet();
         List<TimeIndexItem> timeIndexItemList = timeChannel.loadAllIndexForInit();
         List<TimeItem> timeItemList = new ArrayList<>();
@@ -205,6 +210,7 @@ public class LsmStorage {
         for (String columnName : columnNameSet) {
             columnIndexMap.put(columnName, loadColumnIndex(timeItemList, columnName));
         }
+        loadedAllColumnIndexForInit = indexItemCount;
     }
 
     private Map<Long, ColumnIndexItem> loadColumnIndex(List<TimeItem> timeItemList, String columnName) throws IOException {
@@ -322,6 +328,24 @@ public class LsmStorage {
             metaChannel.write(allocate, 0);
             metaChannel.close();
 
+            long dirtyColumnIndexItemNum = loadedAllColumnIndexForInit;
+            while (true) {
+                if (tableSchema.getColumnList().isEmpty()) {
+                    break;
+                }
+                for (TableSchema.Column column : tableSchema.getColumnList()) {
+                    Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
+                    ColumnIndexItem columnIndexItem = columnIndexItemMap.get(dirtyColumnIndexItemNum++);
+                    if (columnIndexItem == null) {
+                        dirtyColumnIndexItemNum = -1;
+                        break;
+                    }
+                    columnIndexChannel.writeBytes(columnIndexItem.toBytes());
+                }
+                if (dirtyColumnIndexItemNum == -1) {
+                    break;
+                }
+            }
             columnIndexChannel.flush();
             columnIndexChannel.close();
 

@@ -1,5 +1,7 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import java.nio.ByteBuffer;
+
 public class DoubleIndexItem extends ColumnIndexItem {
 
     private double batchSum;
@@ -18,5 +20,15 @@ public class DoubleIndexItem extends ColumnIndexItem {
 
     public double getBatchMax() {
         return batchMax;
+    }
+
+    @Override
+    public byte[] toBytes() {
+        ByteBuffer allocate = ByteBuffer.allocate(8 + 8 + 8 + 4);
+        allocate.putDouble(batchSum);
+        allocate.putDouble(batchMax);
+        allocate.putLong(getPos());
+        allocate.putInt(getSize());
+        return allocate.array();
     }
 }

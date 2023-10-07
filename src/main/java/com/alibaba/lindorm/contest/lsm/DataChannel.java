@@ -181,6 +181,11 @@ public class DataChannel {
         }
     }
 
+    public void writeBytes(byte[] bytes) throws IOException {
+        size += bytes.length;
+        writeBytes(bytes, 0);
+    }
+
     public void writeLong(long l) throws IOException {
         size += 8;
         isDirty = true;

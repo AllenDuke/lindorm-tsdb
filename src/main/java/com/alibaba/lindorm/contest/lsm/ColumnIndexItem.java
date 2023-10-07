@@ -1,5 +1,7 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import java.nio.ByteBuffer;
+
 public abstract class ColumnIndexItem {
 
     private int batchNum;
@@ -25,4 +27,6 @@ public abstract class ColumnIndexItem {
     public int getSize() {
         return size;
     }
+
+    public abstract byte[] toBytes();
 }

@@ -149,10 +149,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         columnOutput.flush();
         int batchGzipSize = columnOutput.batchGzip(batchPos, batchSize);
 
-        columnIndexChannel.writeLong(batchSum);
-        columnIndexChannel.writeInt(batchMax);
-        columnIndexChannel.writeLong(batchPos);
-        columnIndexChannel.writeInt(batchGzipSize);
+//        columnIndexChannel.writeLong(batchSum);
+//        columnIndexChannel.writeInt(batchMax);
+//        columnIndexChannel.writeLong(batchPos);
+//        columnIndexChannel.writeInt(batchGzipSize);
 
         columnIndexItemMap.put((long) columnIndexItemMap.size(), new IntIndexItem(-1, batchPos, batchGzipSize, batchSum, batchMax));
 

@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TimeChannel {
 
-    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 4 + 8;
+    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 2 + 8;
 
     private static final int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
 
@@ -108,7 +108,7 @@ public class TimeChannel {
         maxTime = Math.max(maxTime, time);
 
         // todo 变长编码
-        timeOutput.writeInt((int) (time - lastTime));
+        timeOutput.writeShort((short) (time - lastTime));
 
         lastTime = time;
         batchItemCount++;
@@ -305,7 +305,7 @@ public class TimeChannel {
         }
         pos++;
         while (byteBuffer.remaining() > 0) {
-            last = last + byteBuffer.getInt();
+            last = last + byteBuffer.getShort();
             if (last >= l && last < r) {
                 timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
             }

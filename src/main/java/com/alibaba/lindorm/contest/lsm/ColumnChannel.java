@@ -8,8 +8,14 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class ColumnChannel<C extends ColumnValue> {
+
+    public static AtomicLong AGG_HIT_IDX_CNT = new AtomicLong(0);
+    public static AtomicLong AGG_CNT = new AtomicLong(0);
+
+    public static AtomicLong AGG_LOG_CNT = new AtomicLong(0);
 
     protected final File columnFile;
 

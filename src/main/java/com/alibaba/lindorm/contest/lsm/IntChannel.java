@@ -275,6 +275,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 //                    last = cur;
 //                }
             }
+            AGG_HIT_IDX_CNT.getAndAdd(validCount);
         }
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
@@ -319,6 +320,13 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 lastPre = last;
                 last = cur;
                 pos++;
+            }
+        }
+
+        AGG_CNT.addAndGet(validCount);
+        if (AGG_CNT.get() > 100_000L * AGG_LOG_CNT.get()) {
+            if (AGG_LOG_CNT.compareAndSet(AGG_LOG_CNT.get(), AGG_LOG_CNT.get() + 1)) {
+                System.out.println("agg count:" + AGG_CNT.get() + ", agg hit idx count:" + AGG_HIT_IDX_CNT.get() + " rate:" + (double) AGG_HIT_IDX_CNT.get() / AGG_CNT.get());
             }
         }
 

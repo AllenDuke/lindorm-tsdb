@@ -2,6 +2,10 @@ package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.util.NumberUtil;
+import moe.cnkirito.kdio.DirectChannel;
+import moe.cnkirito.kdio.DirectIOLib;
+import moe.cnkirito.kdio.DirectIOUtils;
+import moe.cnkirito.kdio.DirectRandomAccessFile;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -12,6 +16,7 @@ import java.util.zip.GZIPOutputStream;
 
 import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
 import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
+import static com.alibaba.lindorm.contest.TSDBEngineImpl.directIOLib;
 
 public class DataChannel {
 
@@ -30,7 +35,7 @@ public class DataChannel {
 
     private ByteBuffer lastBuffer;
 
-    private FileChannel channel;
+    private DirectRandomAccessFile directRandomAccessFile;
     private MappedByteBuffer mappedByteBuffer;
     private long channelRealSize;
 
@@ -46,12 +51,9 @@ public class DataChannel {
         this.dataFile = dataFile;
         inputRandomAccessFile = new RandomAccessFile(dataFile, "r");
         if (this.ioMode == 3) {
-            channel = new RandomAccessFile(dataFile, "rw").getChannel();
-            mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, 8);
-            channelRealSize = mappedByteBuffer.getLong();
-            if (channelRealSize > 0) {
-                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8, BUFFER_SIZE);
-            }
+            directRandomAccessFile = new DirectRandomAccessFile(dataFile, "rw");
+            lastBuffer = DirectIOUtils.allocateForDirectIO(directIOLib, BUFFER_SIZE);
+            size = outputNio.size();
         } else if (this.ioMode == 2) {
             outputNio = new RandomAccessFile(dataFile, "rw").getChannel();
             size = outputNio.size();
@@ -118,7 +120,12 @@ public class DataChannel {
         lastBuffer.flip();
         int written = 0;
         while (written < lastBuffer.limit()) {
-            written += outputNio.write(lastBuffer, outputNio.position());
+            if (ioMode == 2) {
+                written += outputNio.write(lastBuffer, outputNio.position());
+            }
+            if (ioMode == 3) {
+                written += directRandomAccessFile.write(lastBuffer, outputNio.position());
+            }
         }
         outputNio.position(outputNio.position() + written);
         lastBuffer.clear();
@@ -136,12 +143,8 @@ public class DataChannel {
     private void writeByte(byte b) throws IOException {
         isDirty = true;
         if (ioMode == 3) {
-            if (!mappedByteBuffer.hasRemaining()) {
-                // 当前已写满，向下增长
-                channelRealSize += BUFFER_SIZE;
-                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8 + channelRealSize, BUFFER_SIZE);
-            }
-            mappedByteBuffer.put(b);
+            nioCheckAndFlushBuffer();
+            lastBuffer.put(b);
         } else if (ioMode == 2) {
             nioCheckAndFlushBuffer();
             lastBuffer.put(b);
@@ -156,15 +159,11 @@ public class DataChannel {
             if (pos >= b.length) {
                 return;
             }
-            while (mappedByteBuffer.hasRemaining() && pos < b.length) {
-                mappedByteBuffer.put(b[pos++]);
+            while (lastBuffer.hasRemaining() && pos < b.length) {
+                lastBuffer.put(b[pos++]);
             }
-            if (mappedByteBuffer.position() >= mappedByteBuffer.limit()) {
-                // 当前已写满，向下增长
-                channelRealSize += BUFFER_SIZE;
-                mappedByteBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 8 + channelRealSize, BUFFER_SIZE);
-            }
-
+            nioCheckAndFlushBuffer();
+            // todo b太大可能会栈溢出，递归优化
             writeBytes(b, pos);
         } else if (ioMode == 2) {
             if (pos >= b.length) {
@@ -190,13 +189,14 @@ public class DataChannel {
         size += 8;
         isDirty = true;
         if (ioMode == 3) {
-            if (mappedByteBuffer.remaining() >= 8) {
-                mappedByteBuffer.putLong(l);
+            if (lastBuffer.remaining() >= 8) {
+                lastBuffer.putLong(l);
             } else {
                 byte[] b = new byte[8];
                 UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET, l, true);
                 writeBytes(b, 0);
             }
+            nioCheckAndFlushBuffer();
         } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putLong(l);
@@ -215,13 +215,14 @@ public class DataChannel {
         size += 2;
         isDirty = true;
         if (ioMode == 3) {
-            if (mappedByteBuffer.remaining() >= 2) {
-                mappedByteBuffer.putShort(s);
+            if (lastBuffer.remaining() >= 2) {
+                lastBuffer.putShort(s);
             } else {
                 byte[] b = new byte[2];
                 UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, s, true);
                 writeBytes(b, 0);
             }
+            nioCheckAndFlushBuffer();
         } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 2) {
                 lastBuffer.putShort(s);
@@ -240,13 +241,14 @@ public class DataChannel {
         size += 4;
         isDirty = true;
         if (ioMode == 3) {
-            if (mappedByteBuffer.remaining() >= 4) {
-                mappedByteBuffer.putInt(i);
+            if (lastBuffer.remaining() >= 4) {
+                lastBuffer.putInt(i);
             } else {
                 byte[] b = new byte[4];
                 UNSAFE.putIntUnaligned(b, ARRAY_BASE_OFFSET, i, true);
                 writeBytes(b, 0);
             }
+            nioCheckAndFlushBuffer();
         } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 4) {
                 lastBuffer.putInt(i);
@@ -264,12 +266,13 @@ public class DataChannel {
     public void writeDouble(double d) throws IOException {
         isDirty = true;
         if (ioMode == 3) {
-            if (mappedByteBuffer.remaining() >= 8) {
-                mappedByteBuffer.putDouble(d);
+            if (lastBuffer.remaining() >= 8) {
+                lastBuffer.putDouble(d);
                 size += 8;
             } else {
                 writeLong(Double.doubleToLongBits(d));
             }
+            nioCheckAndFlushBuffer();
         } else if (ioMode == 2) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putDouble(d);
@@ -287,6 +290,7 @@ public class DataChannel {
         isDirty = true;
         if (ioMode == 3) {
             writeInt(buffer.limit());
+            size += buffer.limit();
             writeBytes(buffer.array(), 0);
         } else if (ioMode == 2) {
             writeInt(buffer.limit());
@@ -299,7 +303,7 @@ public class DataChannel {
 
     public long channelSize() throws IOException {
         if (ioMode == 3) {
-            return channel.size();
+            return size;
         } else if (ioMode == 2) {
             return size;
         } else {
@@ -312,7 +316,7 @@ public class DataChannel {
             return;
         }
         if (ioMode == 3) {
-
+            nioFlushBuffer();
         } else if (ioMode == 2) {
             nioFlushBuffer();
             outputNio.force(true);
@@ -325,7 +329,7 @@ public class DataChannel {
     public void close() throws IOException {
         if (ioMode == 3) {
 //            channel.truncate(channelRealSize + 8);
-            channel.close();
+            directRandomAccessFile.close();
             return;
         }
         if (ioMode == 2) {
@@ -344,8 +348,10 @@ public class DataChannel {
 
     protected ByteBuffer read(long pos, int size) throws IOException {
         if (ioMode == 3) {
-            pos += 8;
-            return channel.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, channel.size() - pos));
+            ByteBuffer allocate = ByteBuffer.allocate(size);
+            int read = directRandomAccessFile.read(allocate, pos);
+            allocate.limit(read);
+            return allocate;
         }
 
 //        if (ioMode == 2) {

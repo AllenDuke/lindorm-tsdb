@@ -199,7 +199,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
             }
             int pos = 0;
             int last = byteBuffer.getInt();
@@ -246,7 +246,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         }
         if (!batchTimeItemSetMap.isEmpty()) {
             // 需要扫描数据列
-            columnOutput.flush();
+//            columnOutput.flush();
         }
 
         if (columnFilter == null && !batchItemList.isEmpty()) {
@@ -309,7 +309,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer.array()));
+                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
             }
             int pos = 0;
             int last = byteBuffer.getInt();

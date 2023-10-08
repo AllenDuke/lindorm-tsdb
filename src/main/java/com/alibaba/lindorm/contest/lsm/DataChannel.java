@@ -29,6 +29,7 @@ public class DataChannel {
     private long inputBioPos;
 
     private ByteBuffer lastBuffer;
+    private long lastReadPos = -1;
 
     //    private DirectRandomAccessFile directRandomAccessFile;
     private MappedByteBuffer mappedByteBuffer;
@@ -67,18 +68,30 @@ public class DataChannel {
     public int batchGzip(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
         size -= read.limit();
-        byte[] bytes = gZip(read.array());
+        byte[] bytes = gZip(read);
         size += bytes.length;
         outputNio.position(batchPos);
         outputNio.write(ByteBuffer.wrap(bytes));
         return bytes.length;
     }
 
-    private byte[] gZip(byte[] data) throws IOException {
+    private byte[] gZip(ByteBuffer v) throws IOException {
+        byte[] array1 = null;
+        if (v.hasArray()) {
+            array1 = v.array();
+            if (array1.length != v.remaining()) {
+                array1 = null;
+            }
+        }
+        if (array1 == null) {
+            array1 = new byte[v.remaining()];
+            v.get(array1);
+        }
+
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         GZIPOutputStream gzip = new GZIPOutputStream(bos);
         byte[] b = null;
-        gzip.write(data);
+        gzip.write(array1);
         gzip.finish();
         b = bos.toByteArray();
         bos.close();
@@ -89,13 +102,25 @@ public class DataChannel {
     /***
      * 解压GZip
      *
-     * @param data
+     * @param v
      * @return
      */
-    public byte[] unGZip(byte[] data) throws IOException {
+    public byte[] unGZip(ByteBuffer v) throws IOException {
+        byte[] array1 = null;
+        if (v.hasArray()) {
+            array1 = v.array();
+            if (array1.length != v.remaining()) {
+                array1 = null;
+            }
+        }
+        if (array1 == null) {
+            array1 = new byte[v.remaining()];
+            v.get(array1);
+        }
+
         byte[] b = null;
 
-        ByteArrayInputStream bis = new ByteArrayInputStream(data);
+        ByteArrayInputStream bis = new ByteArrayInputStream(array1);
         GZIPInputStream gzip = new GZIPInputStream(bis);
         byte[] buf = new byte[1024];
         int num = -1;
@@ -136,7 +161,6 @@ public class DataChannel {
     }
 
     private void writeByte(byte b) throws IOException {
-        isDirty = true;
         if (ioMode == 3) {
             nioCheckAndFlushBuffer();
             lastBuffer.put(b);
@@ -149,7 +173,6 @@ public class DataChannel {
     }
 
     private void writeBytes(byte[] b, int pos) throws IOException {
-        isDirty = true;
         if (ioMode == 3) {
             if (pos >= b.length) {
                 return;
@@ -177,12 +200,21 @@ public class DataChannel {
 
     public void writeBytes(byte[] bytes) throws IOException {
         size += bytes.length;
+        isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         writeBytes(bytes, 0);
     }
 
     public void writeLong(long l) throws IOException {
         size += 8;
         isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         if (ioMode == 3) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putLong(l);
@@ -209,6 +241,10 @@ public class DataChannel {
     public void writeShort(short s) throws IOException {
         size += 2;
         isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         if (ioMode == 3) {
             if (lastBuffer.remaining() >= 2) {
                 lastBuffer.putShort(s);
@@ -235,6 +271,10 @@ public class DataChannel {
     public void writeInt(int i) throws IOException {
         size += 4;
         isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         if (ioMode == 3) {
             if (lastBuffer.remaining() >= 4) {
                 lastBuffer.putInt(i);
@@ -260,6 +300,10 @@ public class DataChannel {
 
     public void writeDouble(double d) throws IOException {
         isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         if (ioMode == 3) {
             if (lastBuffer.remaining() >= 8) {
                 lastBuffer.putDouble(d);
@@ -283,6 +327,10 @@ public class DataChannel {
 
     public void writeString(ByteBuffer buffer) throws IOException {
         isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         if (ioMode == 3) {
             writeInt(buffer.limit());
             size += buffer.limit();
@@ -365,14 +413,34 @@ public class DataChannel {
 //        inputBioPos += bytes.length;
 //        return ByteBuffer.wrap(bytes);
 
-        if (inputBioPos != pos) {
-            inputRandomAccessFile.seek(pos);
-            inputBioPos = pos;
+//        if (inputBioPos != pos) {
+//            inputRandomAccessFile.seek(pos);
+//            inputBioPos = pos;
+//        }
+
+        if (lastReadPos >= 0) {
+            if (pos >= lastReadPos && pos + size <= lastReadPos + lastBuffer.limit()) {
+                // 完整在读缓冲中
+                lastBuffer.position((int) (pos - lastReadPos));
+                ByteBuffer slice = lastBuffer.slice();
+                slice.limit(size);
+                return slice;
+            }
+        }
+        ByteBuffer allocate;
+        if (size <= lastBuffer.capacity()) {
+            lastBuffer.clear();
+            allocate = lastBuffer;
+            lastReadPos = pos;
+        } else {
+            allocate = ByteBuffer.allocate(size);
         }
 
-        ByteBuffer allocate = ByteBuffer.allocate(size);
-        int read = inputRandomAccessFile.read(allocate.array());
-        allocate.limit(read);
+        int read = outputNio.read(allocate, pos);
+        allocate.flip();
+
+//        int read = inputRandomAccessFile.read(allocate.array());
+//        allocate.limit(read);
         inputBioPos += read;
         return allocate;
     }
@@ -392,6 +460,11 @@ public class DataChannel {
     }
 
     public final int writeZInt(int i) throws IOException {
+        isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         return writeVInt(NumberUtil.zigZagEncode(i));
     }
 
@@ -442,6 +515,11 @@ public class DataChannel {
     }
 
     public int writeZDouble(double d) throws IOException {
+        isDirty = true;
+        if (lastReadPos >= 0) {
+            lastBuffer.clear();
+            lastReadPos = -1;
+        }
         int intVal = (int) d;
         final long doubleBits = Double.doubleToLongBits(d);
         if (d == intVal && intVal >= -1 && intVal <= 0x7C && doubleBits != Double.doubleToLongBits(-0d)) {

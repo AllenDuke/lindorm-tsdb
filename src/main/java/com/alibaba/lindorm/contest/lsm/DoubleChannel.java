@@ -193,7 +193,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         if (!batchTimeItemSetMap.isEmpty()) {
             // 需要扫描数据列
-            super.flush();
+//            super.flush();
         }
 
         if (columnFilter == null && !batchItemList.isEmpty()) {

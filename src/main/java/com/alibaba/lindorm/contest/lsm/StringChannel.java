@@ -18,17 +18,17 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     public static final int IDX_SIZE = 8 + 4;
 
-    private final File indexFile;
-
-    private final OutputStream indexOutput;
+//    private final File indexFile;
+//
+//    private final OutputStream indexOutput;
 
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
-        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
-        if (!indexFile.exists()) {
-            indexFile.createNewFile();
-        }
-        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
+//        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
+//        if (!indexFile.exists()) {
+//            indexFile.createNewFile();
+//        }
+//        indexOutput = new BufferedOutputStream(new FileOutputStream(indexFile, true), LsmStorage.OUTPUT_BUFFER_SIZE);
 
     }
 
@@ -124,37 +124,38 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     protected List<StringIndexItem> loadAllIndex() throws IOException {
-        FileInputStream fileInputStream = new FileInputStream(indexFile);
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
-        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
-            throw new IllegalStateException("稀疏索引文件损坏");
-        }
-        fileInputStream.close();
-
-        if (byteBuffer.limit() % IDX_SIZE != 0) {
-            throw new IllegalStateException("稀疏索引文件损坏");
-        }
-        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
-        List<StringIndexItem> indexItemList = new ArrayList<>(indexItemCount);
-
-        if (indexItemCount > 0) {
-            indexItemList.add(new StringIndexItem(0, 0, byteBuffer.getInt()));
-        }
-
-        for (int i = 1; i < indexItemCount; i++) {
-            StringIndexItem indexItem = indexItemList.get(i - 1);
-            indexItemList.add(new StringIndexItem(i, indexItem.getPos() + indexItem.getSize(), byteBuffer.getInt()));
-        }
-
-        if (batchItemCount > 0) {
-            if (indexItemCount > 0) {
-                StringIndexItem indexItem = indexItemList.get(indexItemCount - 1);
-                indexItemList.add(new StringIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize));
-            } else {
-                indexItemList.add(new StringIndexItem(indexItemCount, 0, batchSize));
-            }
-        }
-        return indexItemList;
+//        FileInputStream fileInputStream = new FileInputStream(indexFile);
+//        ByteBuffer byteBuffer = ByteBuffer.allocate((int) indexFile.length());
+//        if (fileInputStream.read(byteBuffer.array()) != (int) indexFile.length()) {
+//            throw new IllegalStateException("稀疏索引文件损坏");
+//        }
+//        fileInputStream.close();
+//
+//        if (byteBuffer.limit() % IDX_SIZE != 0) {
+//            throw new IllegalStateException("稀疏索引文件损坏");
+//        }
+//        int indexItemCount = byteBuffer.limit() / IDX_SIZE;
+//        List<StringIndexItem> indexItemList = new ArrayList<>(indexItemCount);
+//
+//        if (indexItemCount > 0) {
+//            indexItemList.add(new StringIndexItem(0, 0, byteBuffer.getInt()));
+//        }
+//
+//        for (int i = 1; i < indexItemCount; i++) {
+//            StringIndexItem indexItem = indexItemList.get(i - 1);
+//            indexItemList.add(new StringIndexItem(i, indexItem.getPos() + indexItem.getSize(), byteBuffer.getInt()));
+//        }
+//
+//        if (batchItemCount > 0) {
+//            if (indexItemCount > 0) {
+//                StringIndexItem indexItem = indexItemList.get(indexItemCount - 1);
+//                indexItemList.add(new StringIndexItem(indexItemCount, indexItem.getPos() + indexItem.getSize(), batchSize));
+//            } else {
+//                indexItemList.add(new StringIndexItem(indexItemCount, 0, batchSize));
+//            }
+//        }
+//        return indexItemList;
+        return null;
     }
 
     @Override
@@ -185,7 +186,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public void flush() throws IOException {
-        indexOutput.flush();
+//        indexOutput.flush();
         super.flush();
     }
 
@@ -230,8 +231,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     public void shutdown() throws IOException {
-        indexOutput.flush();
-        indexOutput.close();
+//        indexOutput.flush();
+//        indexOutput.close();
         super.shutdown();
     }
 }

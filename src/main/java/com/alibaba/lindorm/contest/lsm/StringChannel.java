@@ -186,11 +186,13 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            boolean zipped = true;
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new StringIndexItem(Math.toIntExact(batchNum), batchPos, batchSize);
+                zipped = false;
             }
-            columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum)));
+            columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum), zipped));
         }
         return columnItemList;
     }
@@ -201,13 +203,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         super.flush();
     }
 
-    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet) throws IOException {
+    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet, boolean zipped) throws IOException {
         flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
 
         ByteBuffer byteBuffer = read(pos, size);
-
+        if (zipped) {
+            byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
+        }
         int posInBatch = 0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);

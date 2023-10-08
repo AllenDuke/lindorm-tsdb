@@ -54,7 +54,7 @@ public class TestMyDbReadOnly {
 
             long begin = System.currentTimeMillis();
 
-            requestedColumns = new HashSet<>(Arrays.asList("col1"));
+            requestedColumns = new HashSet<>(Arrays.asList("col1", "col3"));
             for (int i = 0; i < TestMyDb.ITEM_CNT / LsmStorage.MAX_ITEM_CNT_L0; i++) {
                 resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                         new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + LsmStorage.MAX_ITEM_CNT_L0 * i,

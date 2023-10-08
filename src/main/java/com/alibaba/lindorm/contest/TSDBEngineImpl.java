@@ -9,6 +9,7 @@ package com.alibaba.lindorm.contest;
 
 import com.alibaba.lindorm.contest.lsm.IntChannel;
 import com.alibaba.lindorm.contest.lsm.LsmStorage;
+import com.alibaba.lindorm.contest.lsm.StringChannel;
 import com.alibaba.lindorm.contest.lsm.TableSchema;
 import com.alibaba.lindorm.contest.structs.*;
 
@@ -205,6 +206,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             tableSchema = null;
             connected = false;
             System.out.println("int列原大小：" + IntChannel.ORIG_SIZE.get() + "，实际大小：" + IntChannel.REAL_SIZE.get() + "，压缩率：" + (double) IntChannel.REAL_SIZE.get() / IntChannel.ORIG_SIZE.get());
+            System.out.println("string列原大小：" + StringChannel.ORIG_SIZE.get() + "，实际大小：" + StringChannel.REAL_SIZE.get() + "，压缩率：" + (double) StringChannel.REAL_SIZE.get() / StringChannel.ORIG_SIZE.get());
 //            System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());
             System.out.println("shutdown done");
         } catch (Throwable throwable) {

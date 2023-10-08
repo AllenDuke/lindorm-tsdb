@@ -10,9 +10,13 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
+
+    public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
+    public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
     private static final int TMP_IDX_SIZE = 4 + 8 + 4;
 
@@ -67,7 +71,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     protected void append0(ColumnValue.StringColumn stringColumn) throws IOException {
         // todo 批压缩
-        columnOutput.writeString(stringColumn.getStringValue());
+        ByteBuffer stringValue = stringColumn.getStringValue();
+        columnOutput.writeString(stringValue);
+        ORIG_SIZE.getAndAdd(stringValue.limit());
     }
 
     @Override
@@ -77,10 +83,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+        columnOutput.flush();
+        int batchGzipSize = columnOutput.batchGzip(batchPos, batchSize);
+
         columnIndexChannel.writeLong(batchPos);
-        columnIndexChannel.writeInt(batchSize);
+        columnIndexChannel.writeInt(batchGzipSize);
 
         columnIndexItemMap.put((long) columnIndexItemMap.size(), new StringIndexItem(-1, batchPos, batchSize));
+
+        REAL_SIZE.getAndAdd(batchGzipSize);
     }
 
     @Override

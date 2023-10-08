@@ -172,13 +172,13 @@ public class TimeChannel {
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
 
-        if (IDX_CNT.get() > 4000L * IDX_LOG_CNT.get()) {
-            if (IDX_LOG_CNT.compareAndSet(IDX_LOG_CNT.get(), IDX_LOG_CNT.get() + 1)) {
-                System.out.println("avg delta time:" + delta / (LsmStorage.MAX_ITEM_CNT_L0 - 1));
-            }
-        }
-
-        IDX_CNT.incrementAndGet();
+//        if (IDX_CNT.get() > 4000L * IDX_LOG_CNT.get()) {
+//            if (IDX_LOG_CNT.compareAndSet(IDX_LOG_CNT.get(), IDX_LOG_CNT.get() + 1)) {
+//                System.out.println("avg delta time:" + delta / (LsmStorage.MAX_ITEM_CNT_L0 - 1));
+//            }
+//        }
+//
+//        IDX_CNT.incrementAndGet();
 
         delta = 0;
     }

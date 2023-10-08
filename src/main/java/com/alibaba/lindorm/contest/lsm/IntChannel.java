@@ -80,6 +80,13 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     protected void shutdownTmpIndex() throws IOException {
+        if (columnOutput.isDirty) {
+            // todo 半包标记
+            columnOutput.flush();
+            batchSize = columnOutput.batchGzip(batchPos, batchSize);
+            REAL_SIZE.getAndAdd(batchSize);
+        }
+
         FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
         ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
         byteBuffer.putInt(batchItemCount);
@@ -181,7 +188,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-                zipped = false;
+//                zipped = false;
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
@@ -243,7 +250,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 if (columnIndexItem == null) {
                     // 半包批次
                     columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-                    zipped = false;
+//                    zipped = false;
                     validCount += batchItemCount;
                 } else {
                     validCount += LsmStorage.MAX_ITEM_CNT_L0;
@@ -275,7 +282,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 //                    last = cur;
 //                }
             }
-            AGG_HIT_IDX_CNT.getAndAdd(validCount);
+//            AGG_HIT_IDX_CNT.getAndAdd(validCount);
         }
 
         List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
@@ -285,7 +292,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-                zipped = false;
+//                zipped = false;
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
@@ -323,12 +330,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
         }
 
-        AGG_CNT.addAndGet(validCount);
-        if (AGG_CNT.get() > 1_0000_0000L * AGG_LOG_CNT.get()) {
-            if (AGG_LOG_CNT.compareAndSet(AGG_LOG_CNT.get(), AGG_LOG_CNT.get() + 1)) {
-                System.out.println("agg count:" + AGG_CNT.get() + ", agg hit idx count:" + AGG_HIT_IDX_CNT.get() + " rate:" + (double) AGG_HIT_IDX_CNT.get() / AGG_CNT.get());
-            }
-        }
+//        AGG_CNT.addAndGet(validCount);
+//        if (AGG_CNT.get() > 1_0000_0000L * AGG_LOG_CNT.get()) {
+//            if (AGG_LOG_CNT.compareAndSet(AGG_LOG_CNT.get(), AGG_LOG_CNT.get() + 1)) {
+//                System.out.println("agg count:" + AGG_CNT.get() + ", agg hit idx count:" + AGG_HIT_IDX_CNT.get() + " rate:" + (double) AGG_HIT_IDX_CNT.get() / AGG_CNT.get());
+//            }
+//        }
 
         if (Aggregator.AVG.equals(aggregator)) {
             if (validCount == 0) {

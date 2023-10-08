@@ -36,7 +36,7 @@ public class DataChannel {
 
     private final int ioMode;
 
-    private boolean isDirty;
+    protected boolean isDirty;
 
     private final File dataFile;
     private long size;

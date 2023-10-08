@@ -34,6 +34,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private transient int appendSize;
 
+    private transient boolean halfBatchRecovered;
+
     public IntChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
     }
@@ -76,12 +78,14 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         batchMax = byteBuffer.getInt();
         batchLastInt = byteBuffer.getInt();
         batchLastIntPre = byteBuffer.getInt();
+
+        halfBatchRecovered = true;
     }
 
     @Override
     protected void shutdownTmpIndex() throws IOException {
         if (columnOutput.isDirty) {
-            // todo 半包标记
+            // todo 半包标记 目前shutdown后不会再写
             columnOutput.flush();
             batchSize = columnOutput.batchGzip(batchPos, batchSize);
             REAL_SIZE.getAndAdd(batchSize);
@@ -188,7 +192,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-//                zipped = false;
+                if (!halfBatchRecovered) {
+                    // 临时半包，没有就进行压缩，写入时每百万条读取抽查
+                    zipped = false;
+                }
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
@@ -250,7 +257,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 if (columnIndexItem == null) {
                     // 半包批次
                     columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-//                    zipped = false;
+                    if (!halfBatchRecovered) {
+                        // 临时半包，没有就进行压缩，写入时每百万条读取抽查
+                        zipped = false;
+                    }
                     validCount += batchItemCount;
                 } else {
                     validCount += LsmStorage.MAX_ITEM_CNT_L0;
@@ -292,7 +302,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new IntIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
-//                zipped = false;
+                if (!halfBatchRecovered) {
+                    // 临时半包，没有就进行压缩，写入时每百万条读取抽查
+                    zipped = false;
+                }
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {

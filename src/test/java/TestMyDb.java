@@ -22,6 +22,7 @@
 import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
+import com.alibaba.lindorm.contest.lsm.LsmStorage;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.LatestQueryRequest;
 import com.alibaba.lindorm.contest.structs.Row;
@@ -81,6 +82,10 @@ public class TestMyDb {
             cols.put("col3", ColumnValue.ColumnType.COLUMN_TYPE_STRING);
             Schema schema = new Schema(cols);
 
+            ArrayList<Vin> vinList = new ArrayList<>();
+            vinList.add(new Vin(str.getBytes(StandardCharsets.UTF_8)));
+            Set<String> requestedColumns = new HashSet<>(Arrays.asList("col1", "col2", "col3"));
+
             tsdbEngineSample.createTable("test", schema);
 
             long begin = System.currentTimeMillis();
@@ -91,11 +96,17 @@ public class TestMyDb {
 
                 columns = new HashMap<>();
                 columns.put("col1", new ColumnValue.IntegerColumn(i));
-                columns.put("col2", new ColumnValue.DoubleFloatColumn(i*0.1));
+                columns.put("col2", new ColumnValue.DoubleFloatColumn(i * 0.1));
                 columns.put("col3", new ColumnValue.StringColumn(buffer));
                 rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
 
                 tsdbEngineSample.write(new WriteRequest("test", rowList));
+
+                if (i % 1000_0000 == 0) {
+                    ArrayList<Row> resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
+                            new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, UTC + i, UTC + i + 1));
+                    showResult(resultSet);
+                }
             }
 
 //            rowList.clear();
@@ -128,9 +139,6 @@ public class TestMyDb {
             // Stage2: read
             tsdbEngineSample.connect();
 
-            ArrayList<Vin> vinList = new ArrayList<>();
-            vinList.add(new Vin(str.getBytes(StandardCharsets.UTF_8)));
-            Set<String> requestedColumns = new HashSet<>(Arrays.asList("col1", "col2", "col3"));
             ArrayList<Row> resultSet = tsdbEngineSample.executeLatestQuery(new LatestQueryRequest("test", vinList, requestedColumns));
             showResult(resultSet);
 

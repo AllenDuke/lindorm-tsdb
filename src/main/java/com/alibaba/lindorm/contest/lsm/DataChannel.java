@@ -30,7 +30,7 @@ public class DataChannel {
 
     private ByteBuffer lastBuffer;
 
-//    private DirectRandomAccessFile directRandomAccessFile;
+    //    private DirectRandomAccessFile directRandomAccessFile;
     private MappedByteBuffer mappedByteBuffer;
     private long channelRealSize;
 
@@ -328,6 +328,9 @@ public class DataChannel {
             return;
         }
         if (ioMode == 2) {
+            if (size < outputNio.size()) {
+                outputNio.truncate(size);
+            }
             outputNio.close();
 //            inputNio.close();
 //            inputBioStream.close();

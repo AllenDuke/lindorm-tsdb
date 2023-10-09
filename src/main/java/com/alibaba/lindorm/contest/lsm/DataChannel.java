@@ -2,6 +2,7 @@ package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.util.NumberUtil;
+import com.github.luben.zstd.Zstd;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -68,11 +69,43 @@ public class DataChannel {
     public int batchGzip(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
         size -= read.limit();
-        byte[] bytes = gZip(read);
+        byte[] bytes = zstdEncode(read);
         size += bytes.length;
         outputNio.position(batchPos);
         outputNio.write(ByteBuffer.wrap(bytes));
         return bytes.length;
+    }
+
+    private byte[] zstdEncode(ByteBuffer v) {
+        byte[] array1 = null;
+        if (v.hasArray()) {
+            array1 = v.array();
+            if (array1.length != v.remaining()) {
+                array1 = null;
+            }
+        }
+        if (array1 == null) {
+            array1 = new byte[v.remaining()];
+            v.get(array1);
+        }
+        return Zstd.compress(array1);
+    }
+
+//    7643 610360
+    private byte[] zstdDecode(ByteBuffer v) {
+        byte[] array1 = null;
+        if (v.hasArray()) {
+            array1 = v.array();
+            if (array1.length != v.remaining()) {
+                array1 = null;
+            }
+        }
+        if (array1 == null) {
+            array1 = new byte[v.remaining()];
+            v.get(array1);
+        }
+        int size = (int) Zstd.decompressedSize(array1);
+        return Zstd.decompress(array1, size);
     }
 
     private byte[] gZip(ByteBuffer v) throws IOException {
@@ -106,34 +139,36 @@ public class DataChannel {
      * @return
      */
     public byte[] unGZip(ByteBuffer v) throws IOException {
-        byte[] array1 = null;
-        if (v.hasArray()) {
-            array1 = v.array();
-            if (array1.length != v.remaining()) {
-                array1 = null;
-            }
-        }
-        if (array1 == null) {
-            array1 = new byte[v.remaining()];
-            v.get(array1);
-        }
+        return zstdDecode(v);
 
-        byte[] b = null;
-
-        ByteArrayInputStream bis = new ByteArrayInputStream(array1);
-        GZIPInputStream gzip = new GZIPInputStream(bis);
-        byte[] buf = new byte[1024];
-        int num = -1;
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        while ((num = gzip.read(buf, 0, buf.length)) != -1) {
-            baos.write(buf, 0, num);
-        }
-        b = baos.toByteArray();
-        baos.flush();
-        baos.close();
-        gzip.close();
-        bis.close();
-        return b;
+//        byte[] array1 = null;
+//        if (v.hasArray()) {
+//            array1 = v.array();
+//            if (array1.length != v.remaining()) {
+//                array1 = null;
+//            }
+//        }
+//        if (array1 == null) {
+//            array1 = new byte[v.remaining()];
+//            v.get(array1);
+//        }
+//
+//        byte[] b = null;
+//
+//        ByteArrayInputStream bis = new ByteArrayInputStream(array1);
+//        GZIPInputStream gzip = new GZIPInputStream(bis);
+//        byte[] buf = new byte[1024];
+//        int num = -1;
+//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//        while ((num = gzip.read(buf, 0, buf.length)) != -1) {
+//            baos.write(buf, 0, num);
+//        }
+//        b = baos.toByteArray();
+//        baos.flush();
+//        baos.close();
+//        gzip.close();
+//        bis.close();
+//        return b;
     }
 
     private void nioFlushBuffer() throws IOException {
@@ -433,7 +468,7 @@ public class DataChannel {
 //            allocate = lastBuffer;
 //            lastReadPos = pos;
 //        } else {
-            allocate = ByteBuffer.allocate(size);
+        allocate = ByteBuffer.allocate(size);
 //        }
 
         int read = outputNio.read(allocate, pos);

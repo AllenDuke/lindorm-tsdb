@@ -26,6 +26,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 //
 //    private final OutputStream indexOutput;
 
+    private transient boolean halfBatchRecovered;
+
     public StringChannel(File vinDir, TableSchema.Column column) throws IOException {
         super(vinDir, column);
 //        indexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".idx");
@@ -38,6 +40,13 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
     @Override
     protected void shutdownTmpIndex() throws IOException {
+        if (columnOutput.isDirty) {
+            // todo 半包标记 目前shutdown后不会再写
+            columnOutput.flush();
+            batchSize = columnOutput.batchGzip(batchPos, batchSize);
+            REAL_SIZE.getAndAdd(batchSize);
+        }
+
         FileOutputStream fileOutputStream = new FileOutputStream(tmpIndexFile, false);
         ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_IDX_SIZE);
         byteBuffer.putInt(batchItemCount);
@@ -66,6 +75,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         batchItemCount = byteBuffer.getInt();
         batchPos = byteBuffer.getLong();
         batchSize = byteBuffer.getInt();
+
+        halfBatchRecovered = true;
     }
 
     @Override
@@ -190,7 +201,10 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             if (columnIndexItem == null) {
                 // 半包批次
                 columnIndexItem = new StringIndexItem(Math.toIntExact(batchNum), batchPos, batchSize);
-                zipped = false;
+                if (!halfBatchRecovered) {
+                    // 临时半包，没有就进行压缩，写入时每百万条读取抽查
+                    zipped = false;
+                }
             }
             columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum), zipped));
         }

@@ -61,7 +61,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         flush();
-        int batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+        int batchCompressSize = columnOutput.batchZstdEncode(batchPos, batchSize);
 
         columnIndexChannel.writeDouble(batchSum);
         columnIndexChannel.writeDouble(batchMax);
@@ -105,7 +105,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         if (columnOutput.isDirty) {
             // todo 半包标记 目前shutdown后不会再写
             flush();
-            int batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+            int batchCompressSize = columnOutput.batchZstdEncode(batchPos, batchSize);
             REAL_SIZE.getAndAdd(batchCompressSize);
         }
 
@@ -188,7 +188,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(ByteBufferUtil.toBytes(byteBuffer)));
+                byteBuffer = ByteBuffer.wrap(columnOutput.zstdDecode(byteBuffer));
             }
             int pos = 0;
             double last = byteBuffer.getDouble();

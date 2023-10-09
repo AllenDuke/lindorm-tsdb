@@ -43,7 +43,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         if (columnOutput.isDirty) {
             // todo 半包标记 目前shutdown后不会再写
             columnOutput.flush();
-            batchSize = columnOutput.batchGzip(batchPos, batchSize);
+            batchSize = columnOutput.batchZstdEncode(batchPos, batchSize);
             REAL_SIZE.getAndAdd(batchSize);
         }
 
@@ -95,7 +95,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnOutput.flush();
-        int batchGzipSize = columnOutput.batchGzip(batchPos, batchSize);
+        int batchGzipSize = columnOutput.batchZstdEncode(batchPos, batchSize);
 
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchGzipSize);
@@ -224,7 +224,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         ByteBuffer byteBuffer = read(pos, size);
         if (zipped) {
-            byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
+            byteBuffer = ByteBuffer.wrap(columnOutput.zstdDecode(byteBuffer));
         }
         int posInBatch = 0;
         do {

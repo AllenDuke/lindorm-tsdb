@@ -4,8 +4,8 @@ package com.alibaba.lindorm.contest.elf;
 public class ElfOnChimpCompressor extends AbstractElfCompressor {
     private final Chimp chimp;
 
-    public ElfOnChimpCompressor(int bufferSize) {
-        chimp = new Chimp(bufferSize);
+    public ElfOnChimpCompressor(byte[] buffer) {
+        chimp = new Chimp(buffer);
     }
 
     @Override

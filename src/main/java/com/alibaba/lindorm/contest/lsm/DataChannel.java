@@ -75,7 +75,7 @@ public class DataChannel {
     public int batchElfForDouble(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
         size -= read.limit();
-        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 10);
+        ICompressor compressor = new ElfOnChimpCompressor(new byte[BUFFER_SIZE]);
         while (read.hasRemaining()) {
             compressor.addValue(read.getDouble());
         }
@@ -84,6 +84,7 @@ public class DataChannel {
         size += encode.length;
         outputNio.position(batchPos);
         outputNio.write(ByteBuffer.wrap(encode));
+
         return encode.length;
     }
 

@@ -156,9 +156,9 @@ public class LsmStorage {
     }
 
     public void append(Row row) throws IOException {
-        if (row.getTimestamp() >= latestTime) {
-            latestRow = deepClone(row);
-        }
+//        if (row.getTimestamp() >= latestTime) {
+//            latestRow = deepClone(row);
+//        }
         latestTime = Math.max(row.getTimestamp(), latestTime);
         timeChannel.append(row.getTimestamp());
         boolean idx = timeChannel.checkAndIndex();

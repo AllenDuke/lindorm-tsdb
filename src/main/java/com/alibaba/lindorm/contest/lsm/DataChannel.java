@@ -8,7 +8,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
@@ -76,7 +75,7 @@ public class DataChannel {
         return bytes.length;
     }
 
-    private byte[] zstdEncode(ByteBuffer v) {
+    private byte[] zstdEncode(ByteBuffer v) throws IOException {
         byte[] array1 = null;
         if (v.hasArray()) {
             array1 = v.array();
@@ -89,10 +88,11 @@ public class DataChannel {
             v.get(array1);
         }
         return Zstd.compress(array1);
+//        return Snappy.compress(array1);
     }
 
 //    7643 610360
-    private byte[] zstdDecode(ByteBuffer v) {
+    private byte[] zstdDecode(ByteBuffer v) throws IOException {
         byte[] array1 = null;
         if (v.hasArray()) {
             array1 = v.array();
@@ -105,6 +105,7 @@ public class DataChannel {
             v.get(array1);
         }
         int size = (int) Zstd.decompressedSize(array1);
+//        return Snappy.uncompress(array1);
         return Zstd.decompress(array1, size);
     }
 

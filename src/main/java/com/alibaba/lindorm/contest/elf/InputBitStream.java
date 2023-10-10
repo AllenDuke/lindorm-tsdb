@@ -86,7 +86,7 @@ import java.nio.channels.FileChannel;
  * access an instance of this class concurrently, they must be synchronised externally.
  *
  * @see InputStream
- * @see it.unimi.dsi.io.OutputBitStream
+ * @see OutputBitStream
  * @author Sebastiano Vigna
  * @since 0.1
  */

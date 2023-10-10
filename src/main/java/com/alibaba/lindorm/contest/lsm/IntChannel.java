@@ -87,7 +87,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         if (columnOutput.isDirty) {
             // todo 半包标记 目前shutdown后不会再写
             columnOutput.flush();
-            batchSize = columnOutput.batchGzip(batchPos, batchSize);
+            batchSize = columnOutput.batchZstdEncode(batchPos, batchSize);
             REAL_SIZE.getAndAdd(batchSize);
         }
 
@@ -158,7 +158,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnOutput.flush();
-        int batchGzipSize = columnOutput.batchGzip(batchPos, batchSize);
+        int batchGzipSize = columnOutput.batchZstdEncode(batchPos, batchSize);
 
         columnIndexChannel.writeLong(batchSum);
         columnIndexChannel.writeInt(batchMax);
@@ -199,7 +199,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
+                byteBuffer = ByteBuffer.wrap(columnOutput.zstdDecode(byteBuffer));
             }
             int pos = 0;
             int last = byteBuffer.getInt();
@@ -309,7 +309,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.unGZip(byteBuffer));
+                byteBuffer = ByteBuffer.wrap(columnOutput.zstdDecode(byteBuffer));
             }
             int pos = 0;
             int last = byteBuffer.getInt();

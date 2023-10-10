@@ -1,6 +1,5 @@
 package com.alibaba.lindorm.contest.elf;
 
-
 import java.io.IOException;
 
 public class ElfOnChimpDecompressor extends AbstractElfDecompressor {

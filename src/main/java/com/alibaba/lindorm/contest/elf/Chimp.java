@@ -39,8 +39,8 @@ public class Chimp {
     private final OutputBitStream out;
 
     // We should have access to the series?
-    public Chimp(byte[] buffer) {
-        out = new OutputBitStream(buffer);  // for elf, we need one more bit for each at the worst case
+    public Chimp(int bufferSize) {
+        out = new OutputBitStream(new byte[bufferSize]);  // for elf, we need one more bit for each at the worst case
         size = 0;
     }
 
@@ -54,7 +54,7 @@ public class Chimp {
      * @param value next floating point value in the series
      */
     public int addValue(long value) {
-        if (first) {
+        if(first) {
             return writeFirst(value);
         } else {
             return compressValue(value);
@@ -67,7 +67,7 @@ public class Chimp {
      * @param value next floating point value in the series
      */
     public int addValue(double value) {
-        if (first) {
+        if(first) {
             return writeFirst(Double.doubleToRawLongBits(value));
         } else {
             return compressValue(Double.doubleToRawLongBits(value));
@@ -94,7 +94,7 @@ public class Chimp {
     private int compressValue(long value) {
         int thisSize = 0;
         long xor = storedVal ^ value;
-        if (xor == 0) {
+        if(xor == 0) {
             // Write 0
             out.writeBit(false);
             out.writeBit(false);

@@ -75,7 +75,8 @@ public class DataChannel {
     public int batchElfForDouble(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
         size -= read.limit();
-        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE);
+        // for elf, we need one more bit for each at the worst case
+        ICompressor compressor = new ElfOnChimpCompressor(10000);
         while (read.hasRemaining()) {
             compressor.addValue(read.getDouble());
         }
@@ -88,8 +89,9 @@ public class DataChannel {
         return encode.length;
     }
 
-    public byte[] batchUnElfForDouble(byte[] encode) throws IOException {
-        IDecompressor decompressor = new ElfOnChimpDecompressor(encode);
+    public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
+        byte[] array1 = ByteBufferUtil.toBytes(buffer);
+        IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
         byte[] b = new byte[8 * values.size()];
         for (int i = 0; i < values.size(); i++) {

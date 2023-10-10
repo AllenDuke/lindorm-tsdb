@@ -468,16 +468,18 @@ public class DataChannel {
             }
         }
         ByteBuffer allocate;
-//        if (size <= lastBuffer.capacity()) {
-//              lastBuffer.clear();
-//            allocate = lastBuffer;
-//            lastReadPos = pos;
-//        } else {
-        allocate = ByteBuffer.allocate(size);
-//        }
+        if (size <= lastBuffer.capacity()) {
+            lastBuffer.clear();
+            allocate = lastBuffer;
+            lastReadPos = pos;
+        } else {
+            allocate = ByteBuffer.allocate(size);
+        }
 
         int read = outputNio.read(allocate, pos);
         allocate.flip();
+        allocate = allocate.slice();
+        allocate.limit(Math.min(read, size));
 
 //        int read = inputRandomAccessFile.read(allocate.array());
 //        allocate.limit(read);

@@ -277,7 +277,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(ByteBufferUtil.toBytes(byteBuffer)));
+                byteBuffer = ByteBuffer.wrap(columnOutput.zstdDecode(byteBuffer));
             }
             int pos = 0;
             double last = byteBuffer.getDouble();

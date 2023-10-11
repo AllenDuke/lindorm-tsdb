@@ -138,7 +138,7 @@ public class Chimp {
     }
 
     public int getSize() {
-        return size;
+        return out.pos;
     }
 
     public byte[] getOut() {

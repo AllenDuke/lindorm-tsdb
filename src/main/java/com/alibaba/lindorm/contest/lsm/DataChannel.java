@@ -76,14 +76,16 @@ public class DataChannel {
         ByteBuffer read = this.read(batchPos, batchSize);
         size -= read.limit();
         // for elf, we need one more bit for each at the worst case
-        ICompressor compressor = new ElfOnChimpCompressor(10000);
+        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 3);
         while (read.hasRemaining()) {
             compressor.addValue(read.getDouble());
         }
         compressor.close();
-        byte[] encode = compressor.getBytes();
+        byte[] encode = new byte[compressor.getSize()];
         size += encode.length;
         outputNio.position(batchPos);
+//        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
+        System.arraycopy(compressor.getBytes(), 0, encode, 0, compressor.getSize());
         outputNio.write(ByteBuffer.wrap(encode));
 
         return encode.length;

@@ -13,6 +13,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -74,30 +76,52 @@ public class DataChannel {
 
     public int batchElfForDouble(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
+        outputNio.position(batchPos);
         size -= read.limit();
         // for elf, we need one more bit for each at the worst case
-        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 3);
+        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 4);
+        List<Integer> iList = new ArrayList<>();
         while (read.hasRemaining()) {
-            compressor.addValue(read.getDouble());
+            // 整数和小数分开压缩
+            double v = read.getDouble();
+
+            int i = (int) v - 1;
+            iList.add(i);
+            // 1.x的形式使得阶数部分为0，压缩效果更好
+            compressor.addValue(v - i);
         }
         compressor.close();
-        byte[] encode = new byte[compressor.getSize()];
+
+        // 保存小数部分
+        byte[] encode = new byte[4 + compressor.getSize()];
+        UNSAFE.putIntUnaligned(encode, ARRAY_BASE_OFFSET, compressor.getSize(), true);
         size += encode.length;
-        outputNio.position(batchPos);
 //        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
-        System.arraycopy(compressor.getBytes(), 0, encode, 0, compressor.getSize());
+        System.arraycopy(compressor.getBytes(), 0, encode, 4, compressor.getSize());
         outputNio.write(ByteBuffer.wrap(encode));
 
-        return encode.length;
+        // 保存整数部分
+        ByteBuffer buffer = NumberUtil.zInt(iList);
+        size += buffer.limit();
+        outputNio.write(buffer);
+
+        return encode.length + buffer.limit();
     }
 
     public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(buffer);
+        // 小数部分
+        int postSize = buffer.getInt();
+        byte[] array1 = new byte[postSize];
+        buffer.get(array1);
         IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
+
+        // 整数部分
+        List<Integer> ints = NumberUtil.rzInt(buffer);
+
         byte[] b = new byte[8 * values.size()];
         for (int i = 0; i < values.size(); i++) {
-            Double v = values.get(i);
+            double v = values.get(i) + ints.get(i);
             UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET + i * 8L, Double.doubleToLongBits(v), true);
         }
         return b;

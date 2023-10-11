@@ -14,7 +14,6 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -76,6 +75,37 @@ public class DataChannel {
 
     public int batchElfForDouble(long batchPos, int batchSize) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
+        size -= read.limit();
+        // for elf, we need one more bit for each at the worst case
+        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 4);
+        while (read.hasRemaining()) {
+            compressor.addValue(read.getDouble());
+        }
+        compressor.close();
+        byte[] encode = new byte[compressor.getSize()];
+        size += encode.length;
+        outputNio.position(batchPos);
+//        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
+        System.arraycopy(compressor.getBytes(), 0, encode, 0, compressor.getSize());
+        outputNio.write(ByteBuffer.wrap(encode));
+
+        return encode.length;
+    }
+
+    public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
+        byte[] array1 = ByteBufferUtil.toBytes(buffer);
+        IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
+        List<Double> values = decompressor.decompress();
+        byte[] b = new byte[8 * values.size()];
+        for (int i = 0; i < values.size(); i++) {
+            Double v = values.get(i);
+            UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET + i * 8L, Double.doubleToLongBits(v), true);
+        }
+        return b;
+    }
+
+    public int batchElfForDoubleV2(long batchPos, int batchSize) throws IOException {
+        ByteBuffer read = this.read(batchPos, batchSize);
         outputNio.position(batchPos);
         size -= read.limit();
         // for elf, we need one more bit for each at the worst case
@@ -108,7 +138,7 @@ public class DataChannel {
         return encode.length + buffer.limit();
     }
 
-    public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
+    public byte[] batchUnElfForDoubleV2(ByteBuffer buffer) throws IOException {
         // 小数部分
         int postSize = buffer.getInt();
         byte[] array1 = new byte[postSize];

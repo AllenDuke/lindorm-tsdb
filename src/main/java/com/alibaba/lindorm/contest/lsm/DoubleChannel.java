@@ -1,12 +1,8 @@
 package com.alibaba.lindorm.contest.lsm;
 
-import com.alibaba.lindorm.contest.CommonUtils;
-import com.alibaba.lindorm.contest.elf.ElfOnChimpCompressor;
-import com.alibaba.lindorm.contest.elf.ICompressor;
 import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
-import com.alibaba.lindorm.contest.util.ByteBufferUtil;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -61,7 +57,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         flush();
-        int batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+        int batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize);
 
         columnIndexChannel.writeDouble(batchSum);
         columnIndexChannel.writeDouble(batchMax);
@@ -105,7 +101,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         if (columnOutput.isDirty) {
             // todo 半包标记 目前shutdown后不会再写
             flush();
-            int batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+            int batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize);
             REAL_SIZE.getAndAdd(batchCompressSize);
         }
 
@@ -188,7 +184,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(byteBuffer));
+                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer));
             }
             int pos = 0;
             double last = byteBuffer.getDouble();
@@ -277,7 +273,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(byteBuffer));
+                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer));
             }
             int pos = 0;
             double last = byteBuffer.getDouble();

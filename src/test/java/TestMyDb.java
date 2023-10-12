@@ -97,7 +97,7 @@ public class TestMyDb {
 
                 columns = new HashMap<>();
                 columns.put("col1", new ColumnValue.IntegerColumn(i));
-                columns.put("col2", new ColumnValue.DoubleFloatColumn(0.1 * (i % 10)+random.nextInt(1000)));
+                columns.put("col2", new ColumnValue.DoubleFloatColumn(0.1 * (i % 10)+i%10));
                 columns.put("col3", new ColumnValue.StringColumn(buffer));
                 rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
 

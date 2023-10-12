@@ -10,6 +10,7 @@ import com.alibaba.lindorm.contest.util.NumberUtil;
 import com.github.luben.zstd.Zstd;
 
 import java.io.*;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -108,53 +109,61 @@ public class DataChannel {
         ByteBuffer read = this.read(batchPos, batchSize);
         outputNio.position(batchPos);
         size -= read.limit();
-        // for elf, we need one more bit for each at the worst case
-        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 4);
-        List<Integer> iList = new ArrayList<>();
+
+        int scale = 0;
+
+        List<Integer> headList = new ArrayList<>();
+        List<BigDecimal> tailList = new ArrayList<>();
+
         while (read.hasRemaining()) {
             // 整数和小数分开压缩
             double v = read.getDouble();
+            String s = String.valueOf(v);
 
-            int i = (int) v - 1;
-            iList.add(i);
-            // 1.x的形式使得阶数部分为0，压缩效果更好
-            compressor.addValue(v - i);
+            int i = (int) v;
+            headList.add(i);
+            BigDecimal tail = new BigDecimal(s).subtract(new BigDecimal(String.valueOf(i)));
+            tailList.add(tail);
+            scale = Math.max(scale, tail.scale());
         }
-        compressor.close();
-
-        // 保存小数部分
-        byte[] encode = new byte[4 + compressor.getSize()];
-        UNSAFE.putIntUnaligned(encode, ARRAY_BASE_OFFSET, compressor.getSize(), true);
-        size += encode.length;
-//        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
-        System.arraycopy(compressor.getBytes(), 0, encode, 4, compressor.getSize());
-        outputNio.write(ByteBuffer.wrap(encode));
+        List<Integer> tailIntList = new ArrayList<>();
+        for (BigDecimal tail : tailList) {
+            tailIntList.add(tail.multiply(new BigDecimal("10").pow(scale)).intValue());
+        }
 
         // 保存整数部分
-        ByteBuffer buffer = NumberUtil.zInt(iList);
-        size += buffer.limit();
-        outputNio.write(buffer);
+        ByteBuffer headBuffer = NumberUtil.zInt(headList);
+        outputNio.write(ByteBuffer.allocate(1 + 4).put((byte) scale).putInt(headBuffer.limit()).flip());
+        outputNio.write(headBuffer);
+        size += 1 + 4 + headBuffer.limit();
 
-        return encode.length + buffer.limit();
+        // 保存小数部分
+        ByteBuffer tailBuffer = NumberUtil.zInt(tailIntList);
+        size += tailBuffer.limit();
+        outputNio.write(tailBuffer);
+
+        return 1 + 4 + headBuffer.limit() + tailBuffer.limit();
     }
 
     public byte[] batchUnElfForDoubleV2(ByteBuffer buffer) throws IOException {
         // 小数部分
-        int postSize = buffer.getInt();
-        byte[] array1 = new byte[postSize];
-        buffer.get(array1);
-        IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
-        List<Double> values = decompressor.decompress();
+        int scale = buffer.get();
 
+        int headSize = buffer.getInt();
+        ByteBuffer headBuffer = buffer.slice();
+        headBuffer.limit(headSize);
         // 整数部分
-        List<Integer> ints = NumberUtil.rzInt(buffer);
+        List<Integer> heads = NumberUtil.rzInt(headBuffer);
+        buffer.position(1 + 4 + headSize);
+        // 小数部分
+        List<Integer> tails = NumberUtil.rzInt(buffer);
 
-        byte[] b = new byte[8 * values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            double v = values.get(i) + ints.get(i);
-            UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET + i * 8L, Double.doubleToLongBits(v), true);
+        ByteBuffer allocate = ByteBuffer.allocate(8 * heads.size());
+        for (int i = 0; i < heads.size(); i++) {
+            double v = heads.get(i) + tails.get(i) / Math.pow(10, scale);
+            allocate.putDouble(v);
         }
-        return b;
+        return allocate.array();
     }
 
     public int batchGzip(long batchPos, int batchSize) throws IOException {

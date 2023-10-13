@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -20,13 +21,15 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 8 + 8;
 
-    private static final int TMP_IDX_SIZE = 4 + 8 + 4 + 8 + 8;
+    private static final int TMP_IDX_SIZE = 4 + 8 + 4 + 8 + 8 + 4;
 
-    public static final int IDX_SIZE = 8 + 8 + 8 + 4;
+    public static final int IDX_SIZE = 8 + 8 + 8 + 4 + 4;
 
     private double batchSum;
 
     private double batchMax;
+
+    private int batchMaxScale;
 
     private transient boolean halfBatchRecovered;
 
@@ -37,6 +40,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     @Override
     public void append0(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
         double v = doubleFloatColumn.getDoubleFloatValue();
+        batchMaxScale = Math.max(batchMaxScale, new BigDecimal(String.valueOf(v)).scale());
         columnOutput.writeDouble(v);
         batchSum += v;
         batchMax = Math.max(batchMax, v);
@@ -50,24 +54,32 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         double batchMax = byteBuffer.getDouble();
         long batchPos = byteBuffer.getLong();
         int batchSize = byteBuffer.getInt();
-        DoubleIndexItem doubleIndexItem = new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax);
+        int batchMaxScale = byteBuffer.getInt();
+        DoubleIndexItem doubleIndexItem = new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale);
         return doubleIndexItem;
     }
 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         flush();
-        int batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize);
+        int batchCompressSize;
+        if (batchMaxScale > 6) {
+            batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+        } else {
+            batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize, batchMaxScale);
+        }
 
         columnIndexChannel.writeDouble(batchSum);
         columnIndexChannel.writeDouble(batchMax);
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchCompressSize);
+        columnIndexChannel.writeInt(batchMaxScale);
 
-        columnIndexItemMap.put((long) columnIndexItemMap.size(), new DoubleIndexItem(-1, batchPos, batchCompressSize, batchSum, batchMax));
+        columnIndexItemMap.put((long) columnIndexItemMap.size(), new DoubleIndexItem(-1, batchPos, batchCompressSize, batchSum, batchMax, batchMaxScale));
 
         batchSum = 0;
         batchMax = -Double.MAX_VALUE;
+        batchMaxScale = 0;
 
         REAL_SIZE.getAndAdd(batchCompressSize);
     }
@@ -92,6 +104,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         batchSize = byteBuffer.getInt();
         batchSum = byteBuffer.getDouble();
         batchMax = byteBuffer.getDouble();
+        batchMaxScale = byteBuffer.getInt();
 
         halfBatchRecovered = true;
     }
@@ -101,7 +114,13 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         if (columnOutput.isDirty) {
             // todo 半包标记 目前shutdown后不会再写
             flush();
-            int batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize);
+            int batchCompressSize;
+            if (batchMaxScale > 6) {
+                batchCompressSize = columnOutput.batchElfForDouble(batchPos, batchSize);
+            } else {
+                batchCompressSize = columnOutput.batchElfForDoubleV2(batchPos, batchSize, batchMaxScale);
+            }
+            batchSize = batchCompressSize;
             REAL_SIZE.getAndAdd(batchCompressSize);
         }
 
@@ -112,6 +131,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         byteBuffer.putInt(batchSize);
         byteBuffer.putDouble(batchSum);
         byteBuffer.putDouble(batchMax);
+        byteBuffer.putInt(batchMaxScale);
         fileOutputStream.write(byteBuffer.array());
         fileOutputStream.flush();
         fileOutputStream.close();
@@ -176,7 +196,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             boolean zipped = true;
             if (columnIndexItem == null) {
                 // 半包批次
-                columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax, batchMaxScale);
                 if (!halfBatchRecovered) {
                     // 临时半包，没有就进行压缩，写入时每百万条读取抽查
                     zipped = false;
@@ -184,7 +204,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer));
+                if (batchMaxScale > 6) {
+                    byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(byteBuffer));
+                } else {
+                    byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer, batchMaxScale));
+                }
             }
             int pos = 0;
             double last = byteBuffer.getDouble();
@@ -232,7 +256,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 boolean zipped = true;
                 if (columnIndexItem == null) {
                     // 半包批次
-                    columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                    columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax, batchMaxScale);
                     if (!halfBatchRecovered) {
                         // 临时半包，没有就进行压缩，写入时每百万条读取抽查
                         zipped = false;
@@ -265,7 +289,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             boolean zipped = true;
             if (columnIndexItem == null) {
                 // 半包批次
-                columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax);
+                columnIndexItem = new DoubleIndexItem(Math.toIntExact(batchNum), batchPos, batchSize, batchSum, batchMax, batchMaxScale);
                 if (!halfBatchRecovered) {
                     // 临时半包，没有就进行压缩，写入时每百万条读取抽查
                     zipped = false;
@@ -273,7 +297,11 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
             if (zipped) {
-                byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer));
+                if (batchMaxScale > 6) {
+                    byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDouble(byteBuffer));
+                } else {
+                    byteBuffer = ByteBuffer.wrap(columnOutput.batchUnElfForDoubleV2(byteBuffer, batchMaxScale));
+                }
             }
             int pos = 0;
             double last = byteBuffer.getDouble();

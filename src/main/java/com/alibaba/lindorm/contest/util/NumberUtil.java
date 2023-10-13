@@ -41,7 +41,7 @@ public class NumberUtil {
     }
 
     public static ByteBuffer zInt(List<Integer> ints) {
-        ByteBuffer buffer = ByteBuffer.allocate(ints.size() * 3);
+        ByteBuffer buffer = ByteBuffer.allocate(ints.size() * 5);
         int lastPre = ints.get(0);
         int last = ints.get(1);
         buffer.putInt(lastPre);

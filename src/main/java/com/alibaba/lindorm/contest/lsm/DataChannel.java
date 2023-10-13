@@ -16,6 +16,9 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -23,6 +26,11 @@ import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
 import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
 
 public class DataChannel {
+
+    public static final AtomicLong LAST_CNT = new AtomicLong();
+    public static final AtomicLong LAST_HALF_CNT = new AtomicLong();
+
+    public static final Map<Thread, Integer> MAX_SCALE_MAP = new ConcurrentHashMap<>();
 
     private static final int BUFFER_SIZE = 16 * 1024;
 
@@ -105,12 +113,9 @@ public class DataChannel {
         return b;
     }
 
-    public int batchElfForDoubleV2(long batchPos, int batchSize) throws IOException {
+    public int batchElfForDoubleV2(long batchPos, int batchSize, int scale) throws IOException {
         ByteBuffer read = this.read(batchPos, batchSize);
         outputNio.position(batchPos);
-        size -= read.limit();
-
-        int scale = 0;
 
         List<Integer> headList = new ArrayList<>();
         List<BigDecimal> tailList = new ArrayList<>();
@@ -119,42 +124,44 @@ public class DataChannel {
             // 整数和小数分开压缩
             double v = read.getDouble();
             String s = String.valueOf(v);
+            BigDecimal decimal = new BigDecimal(s);
 
             int i = (int) v;
             headList.add(i);
-            BigDecimal tail = new BigDecimal(s).subtract(new BigDecimal(String.valueOf(i)));
+            BigDecimal tail = decimal.subtract(new BigDecimal(String.valueOf(i)));
             tailList.add(tail);
-            scale = Math.max(scale, tail.scale());
         }
         List<Integer> tailIntList = new ArrayList<>();
         for (BigDecimal tail : tailList) {
             tailIntList.add(tail.multiply(new BigDecimal("10").pow(scale)).intValue());
         }
 
+        size -= read.limit();
+
         // 保存整数部分
         ByteBuffer headBuffer = NumberUtil.zInt(headList);
-        outputNio.write(ByteBuffer.allocate(1 + 4).put((byte) scale).putInt(headBuffer.limit()).flip());
+        outputNio.write(ByteBuffer.allocate(4).putInt(headBuffer.limit()).flip());
         outputNio.write(headBuffer);
-        size += 1 + 4 + headBuffer.limit();
+        size += 4 + headBuffer.limit();
 
         // 保存小数部分
         ByteBuffer tailBuffer = NumberUtil.zInt(tailIntList);
         size += tailBuffer.limit();
         outputNio.write(tailBuffer);
 
-        return 1 + 4 + headBuffer.limit() + tailBuffer.limit();
+        MAX_SCALE_MAP.merge(Thread.currentThread(), scale, Math::max);
+
+        return 4 + headBuffer.limit() + tailBuffer.limit();
     }
 
-    public byte[] batchUnElfForDoubleV2(ByteBuffer buffer) throws IOException {
+    public byte[] batchUnElfForDoubleV2(ByteBuffer buffer, int scale) throws IOException {
         // 小数部分
-        int scale = buffer.get();
-
         int headSize = buffer.getInt();
         ByteBuffer headBuffer = buffer.slice();
         headBuffer.limit(headSize);
         // 整数部分
         List<Integer> heads = NumberUtil.rzInt(headBuffer);
-        buffer.position(1 + 4 + headSize);
+        buffer.position(4 + headSize);
         // 小数部分
         List<Integer> tails = NumberUtil.rzInt(buffer);
 
@@ -524,12 +531,15 @@ public class DataChannel {
 //        }
 
         if (lastReadPos >= 0) {
+            LAST_CNT.incrementAndGet();
             if (pos >= lastReadPos && pos + size <= lastReadPos + lastBuffer.limit()) {
                 // 完整在读缓冲中
                 lastBuffer.position((int) (pos - lastReadPos));
                 ByteBuffer slice = lastBuffer.slice();
                 slice.limit(size);
                 return slice;
+            } else if (pos >= lastReadPos && pos <= lastReadPos + lastBuffer.limit()) {
+                LAST_HALF_CNT.incrementAndGet();
             }
         }
         ByteBuffer allocate;

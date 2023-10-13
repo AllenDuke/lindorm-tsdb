@@ -108,6 +108,13 @@
             <scope>system</scope>
             <systemPath>${project.basedir}/thirdlibs/fastutil-8.5.8.jar</systemPath>
         </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>4.1.18.Final</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/thirdlibs/netty-all-4.1.18.Final.jar</systemPath>
+        </dependency>
     </dependencies>
 
     <build>

@@ -92,10 +92,12 @@ public class DataChannel {
         }
         compressor.close();
         byte[] encode = new byte[compressor.getSize()];
-        size += encode.length;
-        outputNio.position(batchPos);
 //        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
         System.arraycopy(compressor.getBytes(), 0, encode, 0, compressor.getSize());
+
+        outputNio.position(batchPos);
+        encode = gZip(encode);
+        size += encode.length;
         outputNio.write(ByteBuffer.wrap(encode));
 
         return encode.length;
@@ -103,6 +105,7 @@ public class DataChannel {
 
     public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
+        array1 = unGZip(array1);
         IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
         byte[] b = new byte[8 * values.size()];
@@ -207,9 +210,7 @@ public class DataChannel {
 //        return Snappy.uncompress(array1);
     }
 
-    private byte[] gZip(ByteBuffer v) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(v);
-
+    private byte[] gZip(byte[] array1) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         GZIPOutputStream gzip = new GZIPOutputStream(bos);
         byte[] b = null;
@@ -221,15 +222,12 @@ public class DataChannel {
         return b;
     }
 
-    /***
-     * 解压GZip
-     *
-     * @param v
-     * @return
-     */
-    public byte[] unGZip(ByteBuffer v) throws IOException {
+    private byte[] gZip(ByteBuffer v) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(v);
+        return gZip(array1);
+    }
 
+    public byte[] unGZip(byte[] array1) throws IOException {
         byte[] b = null;
 
         ByteArrayInputStream bis = new ByteArrayInputStream(array1);
@@ -246,6 +244,17 @@ public class DataChannel {
         gzip.close();
         bis.close();
         return b;
+    }
+
+    /***
+     * 解压GZip
+     *
+     * @param v
+     * @return
+     */
+    public byte[] unGZip(ByteBuffer v) throws IOException {
+        byte[] array1 = ByteBufferUtil.toBytes(v);
+        return unGZip(array1);
     }
 
     private void nioFlushBuffer() throws IOException {

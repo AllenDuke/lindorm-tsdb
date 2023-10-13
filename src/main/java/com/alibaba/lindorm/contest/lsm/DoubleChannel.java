@@ -29,7 +29,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private double batchMax;
 
-    private int batchMaxScale;
+    private int batchMaxScale = 12;
 
     private transient boolean halfBatchRecovered;
 
@@ -40,7 +40,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     @Override
     public void append0(ColumnValue.DoubleFloatColumn doubleFloatColumn) throws IOException {
         double v = doubleFloatColumn.getDoubleFloatValue();
-        batchMaxScale = Math.max(batchMaxScale, new BigDecimal(String.valueOf(v)).scale());
+//        batchMaxScale = Math.max(batchMaxScale, new BigDecimal(String.valueOf(v)).scale());
         columnOutput.writeDouble(v);
         batchSum += v;
         batchMax = Math.max(batchMax, v);
@@ -79,7 +79,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
         batchSum = 0;
         batchMax = -Double.MAX_VALUE;
-        batchMaxScale = 0;
+        batchMaxScale = 12;
 
         REAL_SIZE.getAndAdd(batchCompressSize);
     }

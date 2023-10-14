@@ -44,8 +44,32 @@ public class RowUtil {
         return rowList;
     }
 
+
+    public static int timeAndColumnSize(Row row) {
+        int size = 8;
+
+        for (ColumnValue cVal : row.getColumns().values()) {
+            switch (cVal.getColumnType()) {
+                case COLUMN_TYPE_STRING:
+                    size += 4;
+                    size += cVal.getStringValue().remaining();
+                    break;
+                case COLUMN_TYPE_INTEGER:
+                    size += 4;
+                    break;
+                case COLUMN_TYPE_DOUBLE_FLOAT:
+                    size += 8;
+                    break;
+                default:
+                    throw new IllegalStateException("Invalid column type");
+            }
+        }
+
+        return size;
+    }
+
     public static ByteBuffer toByteBuffer(TableSchema tableSchema, Row row) {
-        ByteBuffer buffer = ByteBuffer.allocate(row.timeAndColumnSize());
+        ByteBuffer buffer = ByteBuffer.allocate((timeAndColumnSize(row)));
         buffer.putLong(row.getTimestamp());
         tableSchema.getColumnList().forEach(column -> {
             ColumnValue cVal = row.getColumns().get(column.columnName);

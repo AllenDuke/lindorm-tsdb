@@ -28,7 +28,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
-    public static final int IDX_SIZE = 8 + 8 + 8 + 4 + 4;
+    public static final int IDX_SIZE = 8 + 8 + 8 + 4 + 4 + 4;
 
     private double batchSum;
 
@@ -55,7 +55,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         long batchPos = byteBuffer.getLong();
         int batchSize = byteBuffer.getInt();
         int batchMaxScale = byteBuffer.getInt();
-        DoubleIndexItem doubleIndexItem = new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale);
+        int batchItemCount = byteBuffer.getInt();
+        DoubleIndexItem doubleIndexItem = new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale, batchItemCount);
         return doubleIndexItem;
     }
 
@@ -66,8 +67,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchSize);
         columnIndexChannel.writeInt(batchMaxScale);
+        columnIndexChannel.writeInt(batchItemCount);
 
-        columnIndexItemMap.put((long) columnIndexItemMap.size(), new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale));
+        columnIndexItemMap.put((long) columnIndexItemMap.size(), new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale, batchItemCount));
 
         batchSum = 0;
         batchMax = -Double.MAX_VALUE;
@@ -125,7 +127,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
                 DoubleIndexItem columnIndexItem = (DoubleIndexItem) columnIndexItemMap.get(batchNum);
-                validCount += LsmStorage.MAX_ITEM_CNT_L0;
+                validCount += columnIndexItem.getBatchItemCount();
                 sum += columnIndexItem.getBatchSum();
                 max = Math.max(max, columnIndexItem.getBatchMax());
             }

@@ -84,6 +84,8 @@ public class LsmStorage {
 
     private MappedByteBuffer rowBuffer;
 
+//    private List<Row> notCheckRowList = new ArrayList<>(LsmStorage.MAX_ITEM_CNT_L0);
+
     private FileChannel rowChannel;
 
     private long checkTime;
@@ -195,8 +197,9 @@ public class LsmStorage {
     }
 
     public void append(Row row) throws IOException {
+//        row = deepClone(row);
 //        if (row.getTimestamp() >= latestTime) {
-//            latestRow = deepClone(row);
+//            latestRow = row;
 //        }
         latestTime = Math.max(row.getTimestamp(), latestTime);
         if (rowBuffer == null) {
@@ -205,15 +208,17 @@ public class LsmStorage {
             rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 8 * 1024 * 1024);
         }
         rowBuffer.put(RowUtil.toByteBuffer(tableSchema, row));
+//        notCheckRowList.add(row);
         batchItemCount++;
         if (batchItemCount >= LsmStorage.MAX_ITEM_CNT_L0) {
             batchItemCount = 0;
 
             rowBuffer.flip();
-            List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
+            List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
             rowBuffer.clear();
 
-            insert(rowList);
+            insert(notCheckRowList);
+//            notCheckRowList.clear();
         }
     }
 
@@ -373,6 +378,9 @@ public class LsmStorage {
 
     public void shutdown() {
         try {
+//            if (!notCheckRowList.isEmpty()) {
+//                insert(notCheckRowList);
+//            }
             if (rowBuffer != null && rowBuffer.hasRemaining()) {
                 rowBuffer.flip();
                 List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);

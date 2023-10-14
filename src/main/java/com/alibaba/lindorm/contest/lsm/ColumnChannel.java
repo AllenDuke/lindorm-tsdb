@@ -45,6 +45,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public void append(List<C> cList, DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         isDirty = true;
         batchPos = columnOutput.channelSize();
+        batchItemCount = cList.size();
         append0(cList);
         index(columnIndexChannel, columnIndexItemMap);
     }

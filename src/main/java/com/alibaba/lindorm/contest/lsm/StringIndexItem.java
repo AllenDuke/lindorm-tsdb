@@ -4,8 +4,8 @@ import java.nio.ByteBuffer;
 
 public class StringIndexItem extends ColumnIndexItem {
 
-    public StringIndexItem(int batchNum, long pos, int size) {
-        super(batchNum, pos, size);
+    public StringIndexItem(int batchNum, long pos, int size, int batchItemCount) {
+        super(batchNum, pos, size, batchItemCount);
     }
 
     @Override

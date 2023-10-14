@@ -10,8 +10,8 @@ public class DoubleIndexItem extends ColumnIndexItem {
 
     private int batchMaxScale;
 
-    public DoubleIndexItem(int batchNum, long pos, int size, double batchSum, double batchMax, int batchMaxScale) {
-        super(batchNum, pos, size);
+    public DoubleIndexItem(int batchNum, long pos, int size, double batchSum, double batchMax, int batchMaxScale, int batchItemCount) {
+        super(batchNum, pos, size, batchItemCount);
         this.batchSum = batchSum;
         this.batchMax = batchMax;
         this.batchMaxScale = batchMaxScale;

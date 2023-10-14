@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
-    public static final int IDX_SIZE = 8 + 4;
+    public static final int IDX_SIZE = 8 + 4 + 4;
 
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
@@ -46,8 +46,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchSize);
+        columnIndexChannel.writeInt(batchItemCount);
 
-        columnIndexItemMap.put((long) columnIndexItemMap.size(), new StringIndexItem(-1, batchPos, batchSize));
+        columnIndexItemMap.put((long) columnIndexItemMap.size(), new StringIndexItem(-1, batchPos, batchSize, batchItemCount));
 
         REAL_SIZE.getAndAdd(batchSize);
     }
@@ -56,7 +57,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     public ColumnIndexItem readColumnIndexItem(ByteBuffer byteBuffer) throws IOException {
         long batchPos = byteBuffer.getLong();
         int batchSize = byteBuffer.getInt();
-        StringIndexItem stringIndexItem = new StringIndexItem(-1, batchPos, batchSize);
+        int batchItemCount = byteBuffer.getInt();
+        StringIndexItem stringIndexItem = new StringIndexItem(-1, batchPos, batchSize, batchItemCount);
         return stringIndexItem;
     }
 

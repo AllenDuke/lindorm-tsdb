@@ -10,10 +10,13 @@ public abstract class ColumnIndexItem {
 
     private int size;
 
-    public ColumnIndexItem(int batchNum, long pos, int size) {
+    private int batchItemCount;
+
+    public ColumnIndexItem(int batchNum, long pos, int size, int batchItemCount) {
         this.batchNum = batchNum;
         this.pos = pos;
         this.size = size;
+        this.batchItemCount = batchItemCount;
     }
 
     public int getBatchNum() {
@@ -29,4 +32,8 @@ public abstract class ColumnIndexItem {
     }
 
     public abstract byte[] toBytes();
+
+    public int getBatchItemCount() {
+        return batchItemCount;
+    }
 }

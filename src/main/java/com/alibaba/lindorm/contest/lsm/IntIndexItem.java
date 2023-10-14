@@ -8,8 +8,8 @@ public class IntIndexItem extends ColumnIndexItem {
 
     private int batchMax;
 
-    public IntIndexItem(int batchNum, long pos, int size, long batchSum, int batchMax) {
-        super(batchNum, pos, size);
+    public IntIndexItem(int batchNum, long pos, int size, long batchSum, int batchMax, int batchItemCount) {
+        super(batchNum, pos, size, batchItemCount);
         this.batchSum = batchSum;
         this.batchMax = batchMax;
     }

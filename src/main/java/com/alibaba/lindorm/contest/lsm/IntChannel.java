@@ -20,7 +20,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
-    public static final int IDX_SIZE = 8 + 4 + 8 + 4;
+    public static final int IDX_SIZE = 8 + 4 + 8 + 4 + 4;
 
     private long batchSum;
 
@@ -45,7 +45,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         int batchMax = byteBuffer.getInt();
         long batchPos = byteBuffer.getLong();
         int batchSize = byteBuffer.getInt();
-        return new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax);
+        int batchItemCount = byteBuffer.getInt();
+        return new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchItemCount);
     }
 
     @Override
@@ -54,8 +55,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         columnIndexChannel.writeInt(batchMax);
         columnIndexChannel.writeLong(batchPos);
         columnIndexChannel.writeInt(batchSize);
+        columnIndexChannel.writeInt(batchItemCount);
 
-        columnIndexItemMap.put((long) columnIndexItemMap.size(), new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax));
+        columnIndexItemMap.put((long) columnIndexItemMap.size(), new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchItemCount));
 
         batchSum = 0;
         batchMax = Integer.MIN_VALUE;
@@ -114,7 +116,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             for (TimeItem item : batchItemList) {
                 long batchNum = item.getBatchNum();
                 IntIndexItem columnIndexItem = (IntIndexItem) columnIndexItemMap.get(batchNum);
-                validCount += LsmStorage.MAX_ITEM_CNT_L0;
+                validCount += columnIndexItem.getBatchItemCount();
                 sum += columnIndexItem.getBatchSum();
                 max = Math.max(max, columnIndexItem.getBatchMax());
 

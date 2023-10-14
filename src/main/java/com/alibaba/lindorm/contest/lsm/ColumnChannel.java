@@ -26,11 +26,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      */
 //    private final RandomAccessFile columnInput;
 
-    /**
-     * 作用于shutdown时，没有满一批。
-     */
-    protected final File tmpIndexFile;
-
     protected int batchSize;
 
     protected long batchPos;
@@ -39,66 +34,31 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected boolean isDirty;
 
-    public ColumnChannel(File vinDir, TableSchema.Column column) throws IOException {
-        columnFile = new File(vinDir.getAbsolutePath(), column.columnName);
-        if (!columnFile.exists()) {
-            columnFile.createNewFile();
-        }
-        columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+    public ColumnChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+        this.columnFile = columnFile;
+        this.columnOutput = columnOutput;
 //        columnInput = new RandomAccessFile(columnFile, "r");
-
-        tmpIndexFile = new File(vinDir.getAbsolutePath(), column.columnName + ".shutdown");
-        if (tmpIndexFile.exists()) {
-            recoverTmpIndex();
-            if (!tmpIndexFile.delete()) {
-                System.out.println(("tmpIdxFile文件删除失败。"));
-            }
-        }
-
     }
 
     protected abstract void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
-    protected abstract void recoverTmpIndex() throws IOException;
-
-    protected abstract void noNeedRecoverTmpIndex() throws IOException;
-
-    protected abstract void shutdownTmpIndex() throws IOException;
-
-    public void append(C c, DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+    public void append(List<C> cList, DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         isDirty = true;
-        append0(c);
-        batchItemCount++;
-        batchSize += batchGrow(c);
-        if (batchItemCount < LsmStorage.MAX_ITEM_CNT_L0) {
-            return;
-        }
+        append0(cList);
         index(columnIndexChannel, columnIndexItemMap);
         batchPos = columnOutput.channelSize();
-        batchItemCount = 0;
-        batchSize = 0;
     }
-
-    protected abstract List<? extends ColumnIndexItem> loadAllIndex() throws IOException;
 
     public abstract ColumnIndexItem readColumnIndexItem(ByteBuffer byteBuffer) throws IOException;
 
-    protected abstract void append0(C c) throws IOException;
-
-    protected abstract int batchGrow(C c) throws IOException;
+    protected abstract void append0(List<C> cList) throws IOException;
 
     public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
     public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator,
-                                    CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
+                                    CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<C> notcheckList) throws IOException;
 
     public void shutdown() throws IOException {
-        if (batchItemCount > 0) {
-            if (!tmpIndexFile.exists()) {
-                tmpIndexFile.createNewFile();
-            }
-            shutdownTmpIndex();
-        }
         flush();
         columnOutput.close();
 

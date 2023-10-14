@@ -8,9 +8,9 @@ import java.util.List;
 public class TableSchema {
 
     public static class Column {
-        String columnName;
+        public String columnName;
 
-        ColumnValue.ColumnType columnType;
+        public ColumnValue.ColumnType columnType;
 
         int indexSize;
 

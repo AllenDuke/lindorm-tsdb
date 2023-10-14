@@ -32,7 +32,7 @@ public class DataChannel {
 
     public static final Map<Thread, Integer> MAX_SCALE_MAP = new ConcurrentHashMap<>();
 
-    private static final int BUFFER_SIZE = 16 * 1024;
+    public static final int BUFFER_SIZE = 16 * 1024;
 
     private FileChannel outputNio;
 
@@ -80,181 +80,6 @@ public class DataChannel {
         } else {
             outputBio = new FileOutputStream(dataFile, true);
         }
-    }
-
-    public int batchElfForDouble(long batchPos, int batchSize) throws IOException {
-        ByteBuffer read = this.read(batchPos, batchSize);
-        size -= read.limit();
-        // for elf, we need one more bit for each at the worst case
-        ICompressor compressor = new ElfOnChimpCompressor(BUFFER_SIZE * 4);
-        while (read.hasRemaining()) {
-            compressor.addValue(read.getDouble());
-        }
-        compressor.close();
-        byte[] encode = new byte[compressor.getSize()];
-//        UNSAFE.copyMemory(compressor.getBytes(), 0, encode, 0, compressor.getSize());
-        System.arraycopy(compressor.getBytes(), 0, encode, 0, compressor.getSize());
-
-        outputNio.position(batchPos);
-        encode = gZip(encode);
-        size += encode.length;
-        outputNio.write(ByteBuffer.wrap(encode));
-
-        return encode.length;
-    }
-
-    public byte[] batchUnElfForDouble(ByteBuffer buffer) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(buffer);
-        array1 = unGZip(array1);
-        IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
-        List<Double> values = decompressor.decompress();
-        byte[] b = new byte[8 * values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            Double v = values.get(i);
-            UNSAFE.putLongUnaligned(b, ARRAY_BASE_OFFSET + i * 8L, Double.doubleToLongBits(v), true);
-        }
-        return b;
-    }
-
-    public int batchElfForDoubleV2(long batchPos, int batchSize, int scale) throws IOException {
-        ByteBuffer read = this.read(batchPos, batchSize);
-        outputNio.position(batchPos);
-
-        List<Integer> headList = new ArrayList<>();
-        List<BigDecimal> tailList = new ArrayList<>();
-
-        while (read.hasRemaining()) {
-            // 整数和小数分开压缩
-            double v = read.getDouble();
-            String s = String.valueOf(v);
-            BigDecimal decimal = new BigDecimal(s);
-
-            int i = (int) v;
-            headList.add(i);
-            BigDecimal tail = decimal.subtract(new BigDecimal(String.valueOf(i)));
-            tailList.add(tail);
-        }
-        List<Integer> tailIntList = new ArrayList<>();
-        for (BigDecimal tail : tailList) {
-            tailIntList.add(tail.multiply(new BigDecimal("10").pow(scale)).intValue());
-        }
-
-        size -= read.limit();
-
-        // 保存整数部分
-        ByteBuffer headBuffer = NumberUtil.zInt(headList);
-        outputNio.write(ByteBuffer.allocate(4).putInt(headBuffer.limit()).flip());
-        outputNio.write(headBuffer);
-        size += 4 + headBuffer.limit();
-
-        // 保存小数部分
-        ByteBuffer tailBuffer = NumberUtil.zInt(tailIntList);
-        size += tailBuffer.limit();
-        outputNio.write(tailBuffer);
-
-        MAX_SCALE_MAP.merge(Thread.currentThread(), scale, Math::max);
-
-        return 4 + headBuffer.limit() + tailBuffer.limit();
-    }
-
-    public byte[] batchUnElfForDoubleV2(ByteBuffer buffer, int scale) throws IOException {
-        // 小数部分
-        int headSize = buffer.getInt();
-        ByteBuffer headBuffer = buffer.slice();
-        headBuffer.limit(headSize);
-        // 整数部分
-        List<Integer> heads = NumberUtil.rzInt(headBuffer);
-        buffer.position(4 + headSize);
-        // 小数部分
-        List<Integer> tails = NumberUtil.rzInt(buffer);
-
-        ByteBuffer allocate = ByteBuffer.allocate(8 * heads.size());
-        for (int i = 0; i < heads.size(); i++) {
-            double v = heads.get(i) + tails.get(i) / Math.pow(10, scale);
-            allocate.putDouble(v);
-        }
-        return allocate.array();
-    }
-
-    public int batchGzip(long batchPos, int batchSize) throws IOException {
-        ByteBuffer read = this.read(batchPos, batchSize);
-        size -= read.limit();
-        byte[] bytes = gZip(read);
-        size += bytes.length;
-        outputNio.position(batchPos);
-        outputNio.write(ByteBuffer.wrap(bytes));
-        return bytes.length;
-    }
-
-    public int batchZstdEncode(long batchPos, int batchSize) throws IOException {
-        ByteBuffer read = this.read(batchPos, batchSize);
-        size -= read.limit();
-        byte[] bytes = zstdEncode(read);
-        size += bytes.length;
-        outputNio.position(batchPos);
-        outputNio.write(ByteBuffer.wrap(bytes));
-        return bytes.length;
-    }
-
-    private byte[] zstdEncode(ByteBuffer v) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(v);
-        return Zstd.compress(array1);
-//        return Snappy.compress(array1);
-    }
-
-    //    7643 610360
-    public byte[] zstdDecode(ByteBuffer v) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(v);
-        int size = (int) Zstd.decompressedSize(array1);
-        return Zstd.decompress(array1, size);
-//        return Snappy.uncompress(array1);
-    }
-
-    private byte[] gZip(byte[] array1) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        GZIPOutputStream gzip = new GZIPOutputStream(bos);
-        byte[] b = null;
-        gzip.write(array1);
-        gzip.finish();
-        b = bos.toByteArray();
-        bos.close();
-        gzip.close();
-        return b;
-    }
-
-    private byte[] gZip(ByteBuffer v) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(v);
-        return gZip(array1);
-    }
-
-    public byte[] unGZip(byte[] array1) throws IOException {
-        byte[] b = null;
-
-        ByteArrayInputStream bis = new ByteArrayInputStream(array1);
-        GZIPInputStream gzip = new GZIPInputStream(bis);
-        byte[] buf = new byte[1024];
-        int num = -1;
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        while ((num = gzip.read(buf, 0, buf.length)) != -1) {
-            baos.write(buf, 0, num);
-        }
-        b = baos.toByteArray();
-        baos.flush();
-        baos.close();
-        gzip.close();
-        bis.close();
-        return b;
-    }
-
-    /***
-     * 解压GZip
-     *
-     * @param v
-     * @return
-     */
-    public byte[] unGZip(ByteBuffer v) throws IOException {
-        byte[] array1 = ByteBufferUtil.toBytes(v);
-        return unGZip(array1);
     }
 
     private void nioFlushBuffer() throws IOException {
@@ -497,7 +322,7 @@ public class DataChannel {
             return;
         }
         if (ioMode == 2) {
-            if (size < outputNio.size()) {
+            if (outputNio.isOpen() && size < outputNio.size()) {
                 outputNio.truncate(size);
             }
             outputNio.close();
@@ -507,10 +332,6 @@ public class DataChannel {
         } else {
             outputBio.close();
         }
-    }
-
-    public InputStream readStream() throws FileNotFoundException {
-        return new FileInputStream(dataFile);
     }
 
     protected ByteBuffer read(long pos, int size) throws IOException {
@@ -571,110 +392,4 @@ public class DataChannel {
         return allocate;
     }
 //    }
-
-    private int writeVInt(int i) throws IOException {
-        int cnt = 0;
-        while ((i & ~0x7F) != 0) {
-            writeByte((byte) ((i & 0x7F) | 0x80));
-            cnt++;
-            i >>>= 7;
-        }
-        writeByte((byte) i);
-        cnt++;
-        size += cnt;
-        return cnt;
-    }
-
-    public final int writeZInt(int i) throws IOException {
-        isDirty = true;
-        if (lastReadPos >= 0) {
-            lastBuffer.clear();
-            lastReadPos = -1;
-        }
-        return writeVInt(NumberUtil.zigZagEncode(i));
-    }
-
-    private int readVInt(ByteBuffer buffer) throws IOException {
-        byte b = buffer.get();
-        if (b >= 0) return b;
-        int i = b & 0x7F;
-        b = buffer.get();
-        i |= (b & 0x7F) << 7;
-        if (b >= 0) return i;
-        b = buffer.get();
-        i |= (b & 0x7F) << 14;
-        if (b >= 0) return i;
-        b = buffer.get();
-        i |= (b & 0x7F) << 21;
-        if (b >= 0) return i;
-        b = buffer.get();
-        // Warning: the next ands use 0x0F / 0xF0 - beware copy/paste errors:
-        i |= (b & 0x0F) << 28;
-        if ((b & 0xF0) == 0) return i;
-        throw new IOException("Invalid vInt detected (too many bits)");
-    }
-
-    public int readZInt(ByteBuffer buffer) throws IOException {
-        return NumberUtil.zigZagDecode(readVInt(buffer));
-    }
-
-    public double readZDouble(ByteBuffer buffer) throws IOException {
-        int b = buffer.get() & 0xFF;
-        if (b == 0xFF) {
-            // 负数
-            return Double.longBitsToDouble(buffer.getLong());
-        } else if (b == 0xFE) {
-            // 可以转换为float类型的
-            return Float.intBitsToFloat(buffer.getInt());
-        } else if ((b & 0x80) != 0) {
-            // 范围在[-1..124]的小整数
-            return (b & 0x7f) - 1;
-        } else {
-            // 负数double
-            long bits =
-                    ((long) b) << 56
-                            | ((buffer.getInt() & 0xFFFFFFFFL) << 24)
-                            | ((buffer.getShort() & 0xFFFFL) << 8)
-                            | (buffer.get() & 0xFFL);
-            return Double.longBitsToDouble(bits);
-        }
-    }
-
-    public int writeZDouble(double d) throws IOException {
-        isDirty = true;
-        if (lastReadPos >= 0) {
-            lastBuffer.clear();
-            lastReadPos = -1;
-        }
-        int intVal = (int) d;
-        final long doubleBits = Double.doubleToLongBits(d);
-        if (d == intVal && intVal >= -1 && intVal <= 0x7C && doubleBits != Double.doubleToLongBits(-0d)) {
-            // 第1种情况，可以用整数表示，且在[-1,124]: 单字节保存
-            writeByte((byte) (0x80 | (intVal + 1)));
-            size += 1;
-            return 1;
-        } else if (d == (float) d) {
-            // 第2种情况，可以用浮点数保存，写入第一个字节0xFE作为标识符
-            // 后边写入4个字节的float浮点数形式
-            writeByte((byte) 0xFE);
-            size += 1;
-            writeInt(Float.floatToIntBits((float) d));
-            return 5;
-        } else if ((doubleBits >>> 63) == 0) {
-            // 第3种情况，其他整数，需要8个字节
-            writeByte((byte) (doubleBits >> 56));
-            size += 1;
-            writeInt((int) (doubleBits >>> 24));
-            writeShort((short) (doubleBits >>> 8));
-            writeByte((byte) (doubleBits));
-            size += 1;
-            return 8;
-        } else {
-            // 第4种情况，其他负数，需要9个字节
-            writeByte((byte) 0xFF);
-            size += 1;
-            writeLong(doubleBits);
-            return 9;
-        }
-    }
 }

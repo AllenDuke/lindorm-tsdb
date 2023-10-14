@@ -1,9 +1,12 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.structs.*;
+import com.alibaba.lindorm.contest.util.RowUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -79,6 +82,14 @@ public class LsmStorage {
 
     private int loadedAllColumnIndexForInit = -1;
 
+    private MappedByteBuffer rowBuffer;
+
+    private FileChannel rowChannel;
+
+    private long checkTime;
+
+    private int batchItemCount;
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
 //        initColumnExecutor(tableSchema.getColumnList().size());
 //        initColumnFlusher(tableSchema.getColumnList().size());
@@ -102,18 +113,24 @@ public class LsmStorage {
                 latestTime = metaChannel.map(FileChannel.MapMode.READ_ONLY, 0, 8).getLong();
             }
 
+            File columnFile = new File(dir.getAbsolutePath(), "column.data");
+            if (!columnFile.exists()) {
+                columnFile.createNewFile();
+            }
+            DataChannel columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
-                    columnChannelMap.put(column.columnName, new IntChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new IntChannel(dir, column, columnFile, columnOutput));
                     columnIndexItemSize += IntChannel.IDX_SIZE;
                     column.indexSize = IntChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-                    columnChannelMap.put(column.columnName, new DoubleChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new DoubleChannel(dir, column, columnFile, columnOutput));
                     columnIndexItemSize += DoubleChannel.IDX_SIZE;
                     column.indexSize = DoubleChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-                    columnChannelMap.put(column.columnName, new StringChannel(dir, column));
+                    columnChannelMap.put(column.columnName, new StringChannel(dir, column, columnFile, columnOutput));
                     columnIndexItemSize += StringChannel.IDX_SIZE;
                     column.indexSize = StringChannel.IDX_SIZE;
                 } else {
@@ -129,7 +146,9 @@ public class LsmStorage {
 
             loadAllColumnIndexForInit();
 
-            getLatestRow();
+            if (latestTime != 0) {
+                getLatestRow();
+            }
         } catch (IOException e) {
             e.printStackTrace();
             throw new IllegalStateException("LsmStorage初始化失败");
@@ -155,45 +174,47 @@ public class LsmStorage {
         return new Row(row.getVin(), row.getTimestamp(), columnsClone);
     }
 
+    private void insert(List<Row> rowList) throws IOException {
+        for (Row cur : rowList) {
+            timeChannel.append(cur.getTimestamp());
+        }
+        boolean idx = timeChannel.checkAndIndex();
+        checkTime = latestTime;
+
+        // 按schema顺序
+        tableSchema.getColumnList().forEach(column -> {
+            List<ColumnValue> columnValues = rowList.stream().map(row -> row.getColumns().get(column.columnName)).collect(Collectors.toList());
+            try {
+                    columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException(column.columnType + "列插入失败");
+                }
+
+        });
+    }
+
     public void append(Row row) throws IOException {
 //        if (row.getTimestamp() >= latestTime) {
 //            latestRow = deepClone(row);
 //        }
         latestTime = Math.max(row.getTimestamp(), latestTime);
-        timeChannel.append(row.getTimestamp());
-        boolean idx = timeChannel.checkAndIndex();
+        if (rowBuffer == null) {
+            File rowFile = new File(dir, "row");
+            rowChannel = new RandomAccessFile(rowFile, "rw").getChannel();
+            rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 8 * 1024 * 1024);
+        }
+        rowBuffer.put(RowUtil.toByteBuffer(tableSchema, row));
+        batchItemCount++;
+        if (batchItemCount >= LsmStorage.MAX_ITEM_CNT_L0) {
+            batchItemCount = 0;
 
-//        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
-        // 按schema顺序
-        tableSchema.getColumnList().forEach(column -> {
-//            COLUMN_EXECUTOR.execute(() -> {
-            try {
-                columnChannelMap.get(column.columnName).append(row.getColumns().get(column.columnName), columnIndexChannel, columnIndexMap.get(column.columnName));
-                if (idx) {
-                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
+            rowBuffer.flip();
+            List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
+            rowBuffer.clear();
 
-                    }
-                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-
-                    }
-                    if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-
-                    }
-                }
-//                    countDownLatch.countDown();
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new IllegalStateException(column.columnType + "列插入失败");
-            }
-//            });
-        });
-//        try {
-//            countDownLatch.await();
-//        } catch (InterruptedException e) {
-//            throw new RuntimeException(e);
-//        }
-
-//        DIRTY_LSM_STORAGE_SET.put(this, PRESENT);
+            insert(rowList);
+        }
     }
 
     private void loadAllColumnIndexForInit() throws IOException {
@@ -257,24 +278,38 @@ public class LsmStorage {
             throw new IllegalStateException("string类型不支持聚合");
         }
 
-        List<TimeItem> timeRange = timeChannel.agg(l, r);
-        if (timeRange.isEmpty()) {
+        if (l > latestTime) {
             return null;
         }
+
+        List<ColumnValue> notcheckList = new ArrayList<>();
+        if (checkTime < r) {
+            // 在行存储的rowBuffer中
+            rowBuffer.flip();
+            List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
+            for (Row row : notCheckRowList) {
+                if (row.getTimestamp() < l) {
+                    continue;
+                }
+                notcheckList.add(row.getColumns().get(columnName));
+            }
+        }
+
+        List<TimeItem> timeRange = timeChannel.agg(l, r);
         List<TimeItem> batch = timeRange.stream().filter(timeItem -> timeItem.getTime() == 0).collect(Collectors.toList());
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
-        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, columnIndexMap.get(columnName));
+        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, columnIndexMap.get(columnName), notcheckList);
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
         return new Row(vin, l, columnValueMap);
     }
 
     public ArrayList<Row> range(long l, long r, Set<String> requestedColumnSet) throws IOException {
-        List<TimeItem> timeRange = timeChannel.range(l, r);
-        if (timeRange.isEmpty()) {
+        if (l > latestTime) {
             return new ArrayList<>(0);
         }
 
+        List<TimeItem> timeRange = timeChannel.range(l, r);
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
         Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
 //        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
@@ -306,6 +341,24 @@ public class LsmStorage {
             columnValueListMap.forEach((k, v) -> columnValueMap.put(k, v.get(finalI)));
             rowList.add(new Row(vin, timeRange.get(i).getTime(), columnValueMap));
         }
+
+        if (checkTime != 0 && checkTime < r) {
+            // 在行存储的rowBuffer中
+            rowBuffer.flip();
+            List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
+            rowBuffer.limit(rowBuffer.capacity());
+            for (Row row : notCheckRowList) {
+                if (row.getTimestamp() < l) {
+                    continue;
+                }
+                Map<String, ColumnValue> filteredColumns = new HashMap<>();
+                Map<String, ColumnValue> columns = row.getColumns();
+
+                for (String key : requestedColumnSet)
+                    filteredColumns.put(key, columns.get(key));
+                rowList.add(new Row(vin, row.getTimestamp(), filteredColumns));
+            }
+        }
         return rowList;
     }
 
@@ -320,6 +373,19 @@ public class LsmStorage {
 
     public void shutdown() {
         try {
+            if (rowBuffer != null && rowBuffer.hasRemaining()) {
+                rowBuffer.flip();
+                List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
+                insert(rowList);
+
+                CommonUtils.UNSAFE.invokeCleaner(rowBuffer);
+                rowChannel.close();
+                File rowFile = new File(dir.getAbsolutePath(), "row");
+                if (!rowFile.delete()) {
+                    System.out.println(("row文件删除失败。"));
+                }
+            }
+
             shutdownColumnExecutor();
 
             ByteBuffer allocate = ByteBuffer.allocate(8);

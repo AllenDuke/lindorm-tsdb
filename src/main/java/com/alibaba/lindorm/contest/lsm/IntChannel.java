@@ -184,6 +184,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         while (buffer.hasRemaining()) {
             int cur = last - lastPre + last + zigZagDecode(readVInt(buffer));
             ints.add(cur);
+            lastPre = last;
+            last = cur;
         }
         return ints;
     }
@@ -213,10 +215,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         int lastPre = ints.get(0).getIntegerValue();
         batchSum += lastPre;
         batchMax = Math.max(batchMax, lastPre);
+        buffer.putInt(lastPre);
         int last = ints.get(1).getIntegerValue();
         batchSum += last;
         batchMax = Math.max(batchMax, last);
-        buffer.putInt(lastPre);
         buffer.putInt(last);
         for (int i = 2; i < ints.size(); i++) {
             int v = ints.get(i).getIntegerValue();
@@ -228,6 +230,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                 v >>>= 7;
             }
             buffer.put((byte) v);
+            lastPre = last;
+            last = ints.get(i).getIntegerValue();
         }
         buffer.flip();
         return buffer;

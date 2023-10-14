@@ -178,18 +178,18 @@ public class LsmStorage {
         for (Row cur : rowList) {
             timeChannel.append(cur.getTimestamp());
         }
-        boolean idx = timeChannel.checkAndIndex();
+        timeChannel.index();
         checkTime = latestTime;
 
         // 按schema顺序
         tableSchema.getColumnList().forEach(column -> {
             List<ColumnValue> columnValues = rowList.stream().map(row -> row.getColumns().get(column.columnName)).collect(Collectors.toList());
             try {
-                    columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new IllegalStateException(column.columnType + "列插入失败");
-                }
+                columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new IllegalStateException(column.columnType + "列插入失败");
+            }
 
         });
     }
@@ -283,7 +283,7 @@ public class LsmStorage {
         }
 
         List<ColumnValue> notcheckList = new ArrayList<>();
-        if (checkTime < r) {
+        if (checkTime != 0 && checkTime < r) {
             // 在行存储的rowBuffer中
             rowBuffer.flip();
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);

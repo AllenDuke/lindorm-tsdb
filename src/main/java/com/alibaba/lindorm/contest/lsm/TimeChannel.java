@@ -14,12 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TimeChannel {
 
-    public static AtomicLong IDX_LOG_CNT = new AtomicLong(0);
-    public static AtomicLong IDX_CNT = new AtomicLong(0);
-
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 2 + 8;
-
-    private static final int TMP_TIME_IDX_SIZE = 4 + 8 + 8 + 8;
 
     private final DataChannel timeOutput;
 
@@ -28,8 +23,6 @@ public class TimeChannel {
     private final OutputStream timeIndexOutput;
 
     private final File timeIdxFile;
-
-    private final File tmpTimeIdxFile;
 
     private long indexFileSize;
 
@@ -54,8 +47,6 @@ public class TimeChannel {
 
     private int loadedAllIndexForInit = -1;
 
-    private long delta;
-
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time");
         if (!timeFile.exists()) {
@@ -75,27 +66,6 @@ public class TimeChannel {
         indexFileSize = timeIdxFile.length();
 
         loadAllIndexForInit();
-
-        tmpTimeIdxFile = new File(vinDir.getAbsolutePath(), "time.shutdown");
-        if (tmpTimeIdxFile.exists()) {
-            // shutdown时未满一批
-            byte[] bytes = new byte[TMP_TIME_IDX_SIZE];
-            FileInputStream fileInputStream = new FileInputStream(tmpTimeIdxFile);
-            int read = fileInputStream.readNBytes(bytes, 0, TMP_TIME_IDX_SIZE);
-            if (read != TMP_TIME_IDX_SIZE) {
-                throw new IllegalStateException("tmpTimeIdxFile文件损坏。");
-            }
-            fileInputStream.close();
-            if (!tmpTimeIdxFile.delete()) {
-                System.out.println(("tmpTimeIdxFile文件删除失败。"));
-            }
-
-            ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
-            batchItemCount = byteBuffer.getInt();
-            minTime = byteBuffer.getLong();
-            maxTime = byteBuffer.getLong();
-            lastTime = byteBuffer.getLong();
-        }
     }
 
     public void append(long time) throws IOException {
@@ -116,39 +86,14 @@ public class TimeChannel {
         // todo 变长编码
         timeOutput.writeShort((short) (time - lastTime));
 
-        delta += (short) (time - lastTime);
-
         lastTime = time;
         batchItemCount++;
     }
 
     public void shutdown() throws IOException {
-        if (batchItemCount > 0) {
-            if (!tmpTimeIdxFile.exists()) {
-                tmpTimeIdxFile.createNewFile();
-            }
-            FileOutputStream fileOutputStream = new FileOutputStream(tmpTimeIdxFile, false);
-            ByteBuffer byteBuffer = ByteBuffer.allocate(TMP_TIME_IDX_SIZE);
-            byteBuffer.putInt(batchItemCount);
-            byteBuffer.putLong(minTime);
-            byteBuffer.putLong(maxTime);
-            byteBuffer.putLong(lastTime);
-            fileOutputStream.write(byteBuffer.array());
-            fileOutputStream.flush();
-            fileOutputStream.close();
-        }
-
         timeOutput.flush();
         timeOutput.close();
 
-//        System.out.println("shutdown " + vinStr + " 主键索引大小" + indexFileSize + "B");
-
-        // shutdown时保存索引文件
-//        for (int i = loadedAllIndexForInit; i < timeIndexItemList.size(); i++) {
-//            TimeIndexItem timeIndexItem = timeIndexItemList.get(i);
-//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
-//            CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
-//        }
         timeIndexOutput.flush();
         timeIndexOutput.close();
 
@@ -164,7 +109,7 @@ public class TimeChannel {
         isDirty = false;
     }
 
-    private void index() throws IOException {
+    public void index() throws IOException {
         // 输出主键稀疏索引 todo maxTime_delta, delta_bf
         TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
@@ -172,32 +117,7 @@ public class TimeChannel {
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
 
-//        if (IDX_CNT.get() > 4000L * IDX_LOG_CNT.get()) {
-//            if (IDX_LOG_CNT.compareAndSet(IDX_LOG_CNT.get(), IDX_LOG_CNT.get() + 1)) {
-//                System.out.println("avg delta time:" + delta / (LsmStorage.MAX_ITEM_CNT_L0 - 1));
-//            }
-//        }
-//
-//        IDX_CNT.incrementAndGet();
-
-        delta = 0;
-    }
-
-    /**
-     * append后调用
-     *
-     * @return
-     * @throws IOException
-     */
-    public boolean checkAndIndex() throws IOException {
-        if (batchItemCount < LsmStorage.MAX_ITEM_CNT_L0) {
-            return false;
-        }
-
-        index();
-
         batchItemCount = 0;
-        return true;
     }
 
     public List<TimeIndexItem> loadAllIndexForInit() throws IOException {

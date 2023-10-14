@@ -42,6 +42,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     public void append0(List<ColumnValue.DoubleFloatColumn> doubleFloatColumns) throws IOException {
+        ORIG_SIZE.getAndAdd(8 * doubleFloatColumns.size());
         byte[] encode = elf(doubleFloatColumns);
         batchSize = encode.length;
         columnOutput.writeBytes(encode);
@@ -200,7 +201,6 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
         IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
-        byte[] b = new byte[8 * values.size()];
         for (int i = 0; i < values.size(); i++) {
             Double v = values.get(i);
             doubles.add(v);

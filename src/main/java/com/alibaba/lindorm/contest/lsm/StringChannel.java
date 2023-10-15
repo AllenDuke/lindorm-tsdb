@@ -5,6 +5,7 @@ import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
 import com.alibaba.lindorm.contest.util.ByteBufferUtil;
+import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -28,13 +29,26 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     protected void append0(List<ColumnValue.StringColumn> stringColumns) throws IOException {
         int size = 0;
+        // 488288
+        Map<ByteBuffer, Integer> map = new LinkedHashMap<>(stringColumns.size() >> 2);
+        List<Integer> ints = new ArrayList<>(stringColumns.size());
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            size += 4 + stringColumn.getStringValue().limit();
+            Integer integer = map.get(stringColumn.getStringValue());
+            if (integer != null) {
+                ints.add(integer);
+            } else {
+                ints.add(map.size());
+                map.put(stringColumn.getStringValue(), map.size());
+                size += 4 + stringColumn.getStringValue().limit();
+            }
         }
-        ByteBuffer buffer = ByteBuffer.allocate(size);
-        for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            buffer.putInt(stringColumn.getStringValue().limit());
-            buffer.put(stringColumn.getStringValue());
+        ByteBuffer zInt = NumberUtil.zInt(ints);
+        ByteBuffer buffer = ByteBuffer.allocate(4 + zInt.limit() + size);
+        buffer.putInt(zInt.limit());
+        buffer.put(zInt);
+        for (ByteBuffer byteBuffer : map.keySet()) {
+            buffer.putInt(byteBuffer.limit());
+            buffer.put(byteBuffer);
         }
         byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
         batchSize = bytes.length;
@@ -101,6 +115,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         ByteBuffer byteBuffer = read(pos, size);
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
+
         int posInBatch = 0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);

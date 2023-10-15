@@ -208,7 +208,7 @@ public class LsmStorage {
         if (rowBuffer == null) {
             File rowFile = new File(dir, "row");
             rowChannel = new RandomAccessFile(rowFile, "rw").getChannel();
-            rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 * 1024 * 1024);
+            rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 8 * 1024 * 1024);
         }
         RowUtil.toByteBuffer(tableSchema, row, rowBuffer);
 //        notCheckRowList.add(row);
@@ -291,7 +291,7 @@ public class LsmStorage {
         }
 
         List<ColumnValue> notcheckList = new ArrayList<>();
-        if (checkTime != 0 && checkTime < r) {
+        if (rowBuffer != null && rowBuffer.hasRemaining() && checkTime < r) {
             // 在行存储的rowBuffer中
             rowBuffer.flip();
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
@@ -350,7 +350,7 @@ public class LsmStorage {
             rowList.add(new Row(vin, timeRange.get(i).getTime(), columnValueMap));
         }
 
-        if (checkTime != 0 && checkTime < r) {
+        if (rowBuffer != null && rowBuffer.position() > 0 && checkTime < r) {
             // 在行存储的rowBuffer中
             rowBuffer.flip();
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);

@@ -207,7 +207,7 @@ public class LsmStorage {
             rowChannel = new RandomAccessFile(rowFile, "rw").getChannel();
             rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 * 1024 * 1024);
         }
-        rowBuffer.put(RowUtil.toByteBuffer(tableSchema, row));
+        RowUtil.toByteBuffer(tableSchema, row, rowBuffer);
 //        notCheckRowList.add(row);
         batchItemCount++;
         if (batchItemCount >= LsmStorage.MAX_ITEM_CNT_L0) {

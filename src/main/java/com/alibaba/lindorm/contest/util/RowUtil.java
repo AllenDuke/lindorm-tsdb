@@ -91,4 +91,25 @@ public class RowUtil {
         buffer.flip();
         return buffer;
     }
+
+    public static void toByteBuffer(TableSchema tableSchema, Row row, ByteBuffer buffer) {
+        buffer.putLong(row.getTimestamp());
+        tableSchema.getColumnList().forEach(column -> {
+            ColumnValue cVal = row.getColumns().get(column.columnName);
+            switch (cVal.getColumnType()) {
+                case COLUMN_TYPE_STRING:
+                    buffer.putInt(cVal.getStringValue().limit());
+                    buffer.put(cVal.getStringValue());
+                    break;
+                case COLUMN_TYPE_INTEGER:
+                    buffer.putInt(cVal.getIntegerValue());
+                    break;
+                case COLUMN_TYPE_DOUBLE_FLOAT:
+                    buffer.putDouble(cVal.getDoubleFloatValue());
+                    break;
+                default:
+                    throw new IllegalStateException("Invalid column type");
+            }
+        });
+    }
 }

@@ -48,7 +48,7 @@ public class TimeChannel {
     private int loadedAllIndexForInit = -1;
 
     public TimeChannel(File vinDir) throws IOException {
-        timeFile = new File(vinDir.getAbsolutePath(), "time");
+        timeFile = new File(vinDir.getAbsolutePath(), "time.data");
         if (!timeFile.exists()) {
             timeFile.createNewFile();
         }

@@ -177,22 +177,25 @@ public class LsmStorage {
     }
 
     private void insert(List<Row> rowList) throws IOException {
+        Map<String, List<ColumnValue>> columnValuesMap = new HashMap<>(columnChannelMap.size());
         for (Row cur : rowList) {
             timeChannel.append(cur.getTimestamp());
+            for (String columnName : columnChannelMap.keySet()) {
+                columnValuesMap.computeIfAbsent(columnName, v -> new ArrayList<>(rowList.size())).add(cur.getColumns().get(columnName));
+            }
         }
         timeChannel.index();
         checkTime = latestTime;
 
         // 按schema顺序
         tableSchema.getColumnList().forEach(column -> {
-            List<ColumnValue> columnValues = rowList.stream().map(row -> row.getColumns().get(column.columnName)).collect(Collectors.toList());
+            List<ColumnValue> columnValues = columnValuesMap.get(column.columnName);
             try {
                 columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
             } catch (IOException e) {
                 e.printStackTrace();
                 throw new IllegalStateException(column.columnType + "列插入失败");
             }
-
         });
     }
 

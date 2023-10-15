@@ -291,7 +291,7 @@ public class LsmStorage {
         }
 
         List<ColumnValue> notcheckList = new ArrayList<>();
-        if (rowBuffer != null && rowBuffer.hasRemaining() && checkTime < r) {
+        if (rowBuffer != null && rowBuffer.position() > 0 && checkTime < r) {
             // 在行存储的rowBuffer中
             rowBuffer.flip();
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);

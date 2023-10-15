@@ -29,6 +29,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     protected void append0(List<ColumnValue.StringColumn> stringColumns) throws IOException {
         int size = 0;
+        int origSize = 0;
         // 488288
         Map<ByteBuffer, Integer> map = new LinkedHashMap<>(stringColumns.size() >> 2);
         List<Integer> ints = new ArrayList<>(stringColumns.size());
@@ -41,6 +42,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
                 map.put(stringColumn.getStringValue(), map.size());
                 size += 4 + stringColumn.getStringValue().limit();
             }
+            origSize += 4 + stringColumn.getStringValue().limit();
         }
         ByteBuffer zInt = NumberUtil.zInt(ints);
         ByteBuffer buffer = ByteBuffer.allocate(4 + zInt.limit() + size);
@@ -53,7 +55,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
-        ORIG_SIZE.getAndAdd(size);
+        ORIG_SIZE.getAndAdd(origSize);
     }
 
     @Override
@@ -115,16 +117,26 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
 
         ByteBuffer byteBuffer = read(pos, size);
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-
+        int intSize = byteBuffer.getInt();
+        ByteBuffer slice = byteBuffer.slice();
+        slice.limit(intSize);
+        List<Integer> ints = NumberUtil.rzInt(slice);
+        byteBuffer.position(4 + intSize);
+        Map<Integer, ColumnValue.StringColumn> map = new HashMap<>(ints.size() >> 2);
         int posInBatch = 0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);
-            long itemNum = posInBatch + LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
-            if (batchItemSet.contains(itemNum)) {
-                columnItemList.add(new ColumnItem<>(column, itemNum));
-            }
+            map.put(posInBatch, column);
             posInBatch++;
         } while (byteBuffer.hasRemaining());
+
+        for (int i = 0; i < ints.size(); i++) {
+            long itemNum = i + LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
+            if (batchItemSet.contains(itemNum)) {
+                columnItemList.add(new ColumnItem<>(map.get(ints.get(i)), itemNum));
+            }
+        }
+
         return columnItemList;
     }
 

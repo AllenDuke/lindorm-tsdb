@@ -103,7 +103,7 @@ public class TestMyDb {
 
                 tsdbEngineSample.write(new WriteRequest("test", rowList));
 
-                if (i != 0 && i % 1000_0000 == 0) {
+                if ( i % 1000_0000 == 1) {
                     ArrayList<Row> resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                             new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, UTC + i, UTC + i + 1));
                     showResult(resultSet);

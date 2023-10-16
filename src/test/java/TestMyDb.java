@@ -91,21 +91,24 @@ public class TestMyDb {
             long begin = System.currentTimeMillis();
 
             ArrayList<Row> rowList = new ArrayList<>();
-            Random random=new Random();
+            Random random = new Random();
             for (int i = 0; i < ITEM_CNT; i++) {
                 rowList.clear();
 
                 columns = new HashMap<>();
                 columns.put("col1", new ColumnValue.IntegerColumn(i));
-                columns.put("col2", new ColumnValue.DoubleFloatColumn(0.123456+i%10));
+                columns.put("col2", new ColumnValue.DoubleFloatColumn(0.123456 + i % 10));
                 columns.put("col3", new ColumnValue.StringColumn(buffer));
                 rowList.add(new Row(new Vin(str.getBytes(StandardCharsets.UTF_8)), UTC + i, columns));
 
                 tsdbEngineSample.write(new WriteRequest("test", rowList));
 
-                if ( i % 1000_0000 == 1) {
+                if (i % 1000_0000 == 1) {
                     ArrayList<Row> resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
                             new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, UTC + i, UTC + i + 1));
+                    showResult(resultSet);
+                    resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
+                            new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, UTC + i - 1, UTC + i));
                     showResult(resultSet);
                 }
             }

@@ -176,20 +176,29 @@ public class LsmStorage {
         return new Row(row.getVin(), row.getTimestamp(), columnsClone);
     }
 
-    private void insert(List<Row> rowList) throws IOException {
+    private void insert() throws IOException {
+        rowBuffer.flip();
+        List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
+        rowBuffer.clear();
+
         Map<String, List<ColumnValue>> columnValuesMap = new HashMap<>(columnChannelMap.size());
+        int rowSize = rowList.size();
         for (Row cur : rowList) {
             timeChannel.append(cur.getTimestamp());
             for (String columnName : columnChannelMap.keySet()) {
-                columnValuesMap.computeIfAbsent(columnName, v -> new ArrayList<>(rowList.size())).add(cur.getColumns().get(columnName));
+                columnValuesMap.computeIfAbsent(columnName, v -> new ArrayList<>(rowSize)).add(cur.getColumns().get(columnName));
             }
         }
         timeChannel.index();
         checkTime = latestTime;
 
+        // help gc
+        rowList = null;
+
         // 按schema顺序
         tableSchema.getColumnList().forEach(column -> {
-            List<ColumnValue> columnValues = columnValuesMap.get(column.columnName);
+            // help gc
+            List<ColumnValue> columnValues = columnValuesMap.remove(column.columnName);
             try {
                 columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
             } catch (IOException e) {
@@ -216,11 +225,7 @@ public class LsmStorage {
         if (batchItemCount >= LsmStorage.MAX_ITEM_CNT_L0) {
             batchItemCount = 0;
 
-            rowBuffer.flip();
-            List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
-            rowBuffer.clear();
-
-            insert(notCheckRowList);
+            insert();
 //            notCheckRowList.clear();
         }
     }
@@ -299,6 +304,9 @@ public class LsmStorage {
                 if (row.getTimestamp() < l) {
                     continue;
                 }
+                if (row.getTimestamp() >= r) {
+                    break;
+                }
                 notcheckList.add(row.getColumns().get(columnName));
             }
         }
@@ -359,6 +367,9 @@ public class LsmStorage {
                 if (row.getTimestamp() < l) {
                     continue;
                 }
+                if (row.getTimestamp() >= r) {
+                    break;
+                }
                 Map<String, ColumnValue> filteredColumns = new HashMap<>();
                 Map<String, ColumnValue> columns = row.getColumns();
 
@@ -385,9 +396,7 @@ public class LsmStorage {
 //                insert(notCheckRowList);
 //            }
             if (rowBuffer != null && rowBuffer.hasRemaining()) {
-                rowBuffer.flip();
-                List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
-                insert(rowList);
+                insert();
 
                 CommonUtils.UNSAFE.invokeCleaner(rowBuffer);
                 rowChannel.close();

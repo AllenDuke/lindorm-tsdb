@@ -301,11 +301,8 @@ public class LsmStorage {
             rowBuffer.flip();
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
             for (Row row : notCheckRowList) {
-                if (row.getTimestamp() < l) {
+                if (row.getTimestamp() < l || row.getTimestamp() >= r) {
                     continue;
-                }
-                if (row.getTimestamp() >= r) {
-                    break;
                 }
                 notcheckList.add(row.getColumns().get(columnName));
             }
@@ -364,11 +361,8 @@ public class LsmStorage {
             List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
             rowBuffer.limit(rowBuffer.capacity());
             for (Row row : notCheckRowList) {
-                if (row.getTimestamp() < l) {
+                if (row.getTimestamp() < l || row.getTimestamp() >= r) {
                     continue;
-                }
-                if (row.getTimestamp() >= r) {
-                    break;
                 }
                 Map<String, ColumnValue> filteredColumns = new HashMap<>();
                 Map<String, ColumnValue> columns = row.getColumns();
@@ -377,7 +371,9 @@ public class LsmStorage {
                     filteredColumns.put(key, columns.get(key));
                 rowList.add(new Row(vin, row.getTimestamp(), filteredColumns));
             }
+
         }
+
         return rowList;
     }
 

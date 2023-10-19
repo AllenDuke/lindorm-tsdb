@@ -150,7 +150,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             AtomicLong timeIndexFileSize = new AtomicLong(0);
             AtomicLong columnIndexFileSize = new AtomicLong(0);
             CountDownLatch countDownLatch = new CountDownLatch(LSM_STORAGES.size());
-            ThreadPoolExecutor shutdownExecutor = new ThreadPoolExecutor(100, 100, 3L, TimeUnit.SECONDS,
+            ThreadPoolExecutor shutdownExecutor = new ThreadPoolExecutor(8, 8, 3L, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(10000), new ThreadPoolExecutor.CallerRunsPolicy());
             for (LsmStorage lsmStorage : LSM_STORAGES.values()) {
                 shutdownExecutor.execute(() -> {

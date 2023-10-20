@@ -20,7 +20,7 @@ public class LsmStorage {
     /**
      * 每8k数据为一块
      */
-    public static final int MAX_ITEM_CNT_L0 = 4 * 1024;
+    public static final int MAX_ITEM_CNT_L0 = 2 * 1024;
 
     public static final int OUTPUT_BUFFER_SIZE = 8 * 1024;
 
@@ -217,7 +217,7 @@ public class LsmStorage {
         if (rowBuffer == null) {
             File rowFile = new File(dir, "row");
             rowChannel = new RandomAccessFile(rowFile, "rw").getChannel();
-            rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 8 * 1024 * 1024);
+            rowBuffer = rowChannel.map(FileChannel.MapMode.READ_WRITE, 0, 4 * 1024 * 1024);
         }
         RowUtil.toByteBuffer(tableSchema, row, rowBuffer);
 //        notCheckRowList.add(row);

@@ -66,18 +66,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnOutput.flush();
 
         List<ColumnItem<ColumnValue.IntegerColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
-        Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
-        for (TimeItem timeItem : timeItemList) {
-            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
-            timeItemSet.add(timeItem.getItemNum());
-        }
-
-        List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
+        Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
@@ -98,19 +92,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Aggregator aggregator,
+    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Aggregator aggregator,
                            CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.IntegerColumn> notcheckList) throws IOException {
         long sum = 0;
         int validCount = 0;
         int max = Integer.MIN_VALUE;
-
-        Map<Long, Set<Long>> batchTimeItemSetMap = new HashMap<>();
-        for (TimeItem timeItem : timeItemList) {
-            if (timeItem.getTime() > 0) {
-                Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
-                timeItemSet.add(timeItem.getItemNum());
-            }
-        }
 
         if (columnFilter == null && !batchItemList.isEmpty()) {
             for (TimeItem item : batchItemList) {
@@ -124,7 +110,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 //            AGG_HIT_IDX_CNT.getAndAdd(validCount);
         }
 
-        List<Long> batchNumList = batchTimeItemSetMap.keySet().stream().sorted().collect(Collectors.toList());
+        Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
             ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());

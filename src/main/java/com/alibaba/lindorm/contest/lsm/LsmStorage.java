@@ -309,9 +309,18 @@ public class LsmStorage {
         }
 
         List<TimeItem> timeRange = timeChannel.agg(l, r);
-        List<TimeItem> batch = timeRange.stream().filter(timeItem -> timeItem.getTime() == 0).collect(Collectors.toList());
+        List<TimeItem> batch = new ArrayList<>();
+        Map<Long, Set<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
+        for (TimeItem timeItem : timeRange) {
+            if (timeItem.getTime() == 0) {
+                batch.add(timeItem);
+            } else {
+                Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+                timeItemSet.add(timeItem.getItemNum());
+            }
+        }
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
-        ColumnValue agg = columnChannel.agg(batch, timeRange, aggregator, columnFilter, columnIndexMap.get(columnName), notcheckList);
+        ColumnValue agg = columnChannel.agg(batch, timeRange, batchTimeItemSetMap, aggregator, columnFilter, columnIndexMap.get(columnName), notcheckList);
         Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
         columnValueMap.put(columnName, agg);
         return new Row(vin, l, columnValueMap);
@@ -325,12 +334,19 @@ public class LsmStorage {
         List<TimeItem> timeRange = timeChannel.range(l, r);
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
         Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
+
+        Map<Long, Set<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
+        for (TimeItem timeItem : timeRange) {
+            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+            timeItemSet.add(timeItem.getItemNum());
+        }
+
 //        CountDownLatch countDownLatch = new CountDownLatch(columnChannelMap.size());
         for (String columnName : requestedColumnSet) {
             ColumnChannel columnChannel = columnChannelMap.get(columnName);
 //            COLUMN_EXECUTOR.execute(() -> {
             try {
-                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange, columnIndexMap.get(columnName));
+                List<ColumnItem<ColumnValue>> columnItemList = columnChannel.range(timeRange, batchTimeItemSetMap, columnIndexMap.get(columnName));
                 List<ColumnValue> columnValueList = new ArrayList<>(columnItemList.size());
                 for (ColumnItem<ColumnValue> columnItem : columnItemList) {
                     columnValueList.add(columnItem.getItem());

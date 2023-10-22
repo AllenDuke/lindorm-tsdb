@@ -373,13 +373,13 @@ public class DataChannel {
             }
         }
         ByteBuffer allocate;
-        if (size <= lastBuffer.capacity()) {
-            lastBuffer.clear();
-            allocate = lastBuffer;
-            lastReadPos = pos;
-        } else {
+//        if (size <= lastBuffer.capacity()) {
+//            lastBuffer.clear();
+//            allocate = lastBuffer;
+//            lastReadPos = pos;
+//        } else {
             allocate = ByteBuffer.allocate(size);
-        }
+//        }
 
         int read = outputNio.read(allocate, pos);
         allocate.flip();

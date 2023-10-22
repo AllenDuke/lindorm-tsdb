@@ -11,6 +11,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -72,9 +73,18 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         List<ColumnItem<ColumnValue.IntegerColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+        for (Long batchNum : batchNumList) {
+            ByteBuffer byteBuffer = null;
+            try {
+                byteBuffer = futureMap.get(batchNum).get();
+            } catch (Exception e) {
+                throw new RuntimeException("获取buffer future failed.", e);
+            }
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
             List<Integer> ints = this.rzInt(byteBuffer);
@@ -111,9 +121,18 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         }
 
         Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+        for (Long batchNum : batchNumList) {
+            ByteBuffer byteBuffer = null;
+            try {
+                byteBuffer = futureMap.get(batchNum).get();
+            } catch (Exception e) {
+                throw new RuntimeException("获取buffer future failed.", e);
+            }
 
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 

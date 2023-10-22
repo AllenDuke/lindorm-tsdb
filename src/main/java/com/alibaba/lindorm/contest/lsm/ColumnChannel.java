@@ -9,7 +9,13 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.alibaba.lindorm.contest.TSDBEngineImpl.IO_EXECUTOR;
 
 public abstract class ColumnChannel<C extends ColumnValue> {
 
@@ -83,7 +89,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @return
      * @throws IOException
      */
-    protected ByteBuffer read(long pos, int size) throws IOException {
-        return columnOutput.read(pos, size);
+    protected Future<ByteBuffer> read(long pos, int size) throws IOException {
+        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
     }
 }

@@ -11,6 +11,8 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -75,9 +77,14 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum)));
+            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+        for (Long batchNum : batchNumList) {
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            columnItemList.addAll(range(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize(), batchTimeItemSetMap.get(batchNum), futureMap.get(batchNum)));
         }
         return columnItemList;
     }
@@ -88,12 +95,17 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         super.flush();
     }
 
-    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet) throws IOException {
+    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet, Future<ByteBuffer> bufferFuture) throws IOException {
         flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
 
-        ByteBuffer byteBuffer = read(pos, size);
+        ByteBuffer byteBuffer = null;
+        try {
+            byteBuffer = bufferFuture.get();
+        } catch (Exception e) {
+            throw new RuntimeException("获取buffer future failed.", e);
+        }
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         int posInBatch = 0;
         do {

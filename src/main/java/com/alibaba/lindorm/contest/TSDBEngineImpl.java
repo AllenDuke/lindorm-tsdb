@@ -20,6 +20,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TSDBEngineImpl extends TSDBEngine {
 
+    public static ThreadPoolExecutor IO_EXECUTOR;
+
 //    public static DirectIOLib directIOLib;
 
     static {
@@ -40,7 +42,7 @@ public class TSDBEngineImpl extends TSDBEngine {
         flusher = new Thread(() -> {
             while (connected) {
                 try {
-                    Thread.sleep(1000 * 60  * 5);
+                    Thread.sleep(1000 * 60 * 5);
                     System.out.println("lastBuffer命中次数：" + DataChannel.LAST_CNT.get() + "，半包次数：" + DataChannel.LAST_HALF_CNT.get() + "，半包率：" + (double) DataChannel.LAST_HALF_CNT.get() / DataChannel.LAST_CNT.get());
                 } catch (Throwable throwable) {
                     throwable.printStackTrace(System.out);
@@ -69,6 +71,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             if (connected) {
                 throw new IOException("Connected");
             }
+            IO_EXECUTOR = new ThreadPoolExecutor(64, 64, 3L, TimeUnit.SECONDS,
+                    new ArrayBlockingQueue<>(10000), new ThreadPoolExecutor.CallerRunsPolicy());
             File schemaFile = new File(dataPath, "schema.txt");
             if (!schemaFile.exists() || !schemaFile.isFile()) {
                 System.out.println("Connect new database with empty pre-written data");
@@ -170,6 +174,8 @@ public class TSDBEngineImpl extends TSDBEngine {
 
             System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get() / 1000 + "KB");
             System.out.println("shutdown column索引总大小：" + columnIndexFileSize.get() / 1000 + "KB");
+
+            IO_EXECUTOR.shutdown();
 
             // Persist the schema.
             try {

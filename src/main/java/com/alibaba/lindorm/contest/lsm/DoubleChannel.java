@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -85,9 +87,18 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         List<ColumnItem<ColumnValue.DoubleFloatColumn>> columnItemList = new ArrayList<>(timeItemList.size());
 
         Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+        for (Long batchNum : batchNumList) {
+            ByteBuffer byteBuffer = null;
+            try {
+                byteBuffer = futureMap.get(batchNum).get();
+            } catch (Exception e) {
+                throw new RuntimeException("获取buffer future failed.", e);
+            }
             List<Double> doubles = unElf(byteBuffer);
             int pos = 0;
             long itemNum;
@@ -120,10 +131,18 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         }
 
         Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-
-            ByteBuffer byteBuffer = read(columnIndexItem.getPos(), columnIndexItem.getSize());
+            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+        for (Long batchNum : batchNumList) {
+            ByteBuffer byteBuffer = null;
+            try {
+                byteBuffer = futureMap.get(batchNum).get();
+            } catch (Exception e) {
+                throw new RuntimeException("获取buffer future failed.", e);
+            }
             List<Double> doubles = unElf(byteBuffer);
             int pos = 0;
             long itemNum;

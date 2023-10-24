@@ -88,13 +88,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
             List<Integer> ints = this.rzInt(byteBuffer);
-            int pos = 0;
-            long itemNum;
+            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             for (Integer cur : ints) {
-                itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos++;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
                     columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(cur), itemNum));
                 }
+                itemNum++;
             }
         }
 
@@ -137,15 +136,14 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
             List<Integer> ints = this.rzInt(byteBuffer);
-            int pos = 0;
-            long itemNum;
+            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             for (Integer cur : ints) {
-                itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos++;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(cur)))) {
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);
                 }
+                itemNum++;
             }
         }
 

@@ -58,7 +58,7 @@ public class TestMyDb {
         }
 
         TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
-        String str = "12345678912345678";
+        String str = "LSVNV2182E0541854";
 
         try {
             // Stage1: write

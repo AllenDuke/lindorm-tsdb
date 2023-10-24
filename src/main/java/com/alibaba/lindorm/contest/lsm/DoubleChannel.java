@@ -1,9 +1,6 @@
 package com.alibaba.lindorm.contest.lsm;
 
-import com.alibaba.lindorm.contest.elf.ElfOnChimpCompressor;
-import com.alibaba.lindorm.contest.elf.ElfOnChimpDecompressor;
-import com.alibaba.lindorm.contest.elf.ICompressor;
-import com.alibaba.lindorm.contest.elf.IDecompressor;
+import com.alibaba.lindorm.contest.elf.*;
 import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
@@ -100,14 +97,12 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 throw new RuntimeException("获取buffer future failed.", e);
             }
             List<Double> doubles = unElf(byteBuffer);
-            int pos = 0;
-            long itemNum;
+            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             for (Double last : doubles) {
-                itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
                     columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(last), itemNum));
                 }
-                pos++;
+                itemNum++;
             }
         }
         return columnItemList;
@@ -144,17 +139,15 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 throw new RuntimeException("获取buffer future failed.", e);
             }
             List<Double> doubles = unElf(byteBuffer);
-            int pos = 0;
-            long itemNum;
+            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             for (Double last : doubles) {
-                itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos;
                 if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.DoubleFloatColumn(last)))) {
                     sum += last;
                     validCount++;
                     max = Math.max(last, max);
 
                 }
-                pos++;
+                itemNum++;
             }
         }
 
@@ -204,14 +197,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     public List<Double> unElf(ByteBuffer buffer) throws IOException {
-        List<Double> doubles = new ArrayList<>();
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
         IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
-        for (int i = 0; i < values.size(); i++) {
-            Double v = values.get(i);
-            doubles.add(v);
-        }
-        return doubles;
+        return values;
     }
 }

@@ -343,7 +343,8 @@ public class DataChannel {
         }
 
 //        if (ioMode == 2) {
-//            return inputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
+        MappedByteBuffer map = outputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
+        return map.load();
 //        } else {
 //        if (inputBioPos != pos) {
 //            inputBioStream.close();
@@ -360,36 +361,36 @@ public class DataChannel {
 //            inputBioPos = pos;
 //        }
 
-        if (lastReadPos >= 0) {
-            LAST_CNT.incrementAndGet();
-            if (pos >= lastReadPos && pos + size <= lastReadPos + lastBuffer.limit()) {
-                // 完整在读缓冲中
-                lastBuffer.position((int) (pos - lastReadPos));
-                ByteBuffer slice = lastBuffer.slice();
-                slice.limit(size);
-                return slice;
-            } else if (pos >= lastReadPos && pos <= lastReadPos + lastBuffer.limit()) {
-                LAST_HALF_CNT.incrementAndGet();
-            }
-        }
-        ByteBuffer allocate;
-//        if (size <= lastBuffer.capacity()) {
-//            lastBuffer.clear();
-//            allocate = lastBuffer;
-//            lastReadPos = pos;
-//        } else {
-            allocate = ByteBuffer.allocate(size);
+//        if (lastReadPos >= 0) {
+//            LAST_CNT.incrementAndGet();
+//            if (pos >= lastReadPos && pos + size <= lastReadPos + lastBuffer.limit()) {
+//                // 完整在读缓冲中
+//                lastBuffer.position((int) (pos - lastReadPos));
+//                ByteBuffer slice = lastBuffer.slice();
+//                slice.limit(size);
+//                return slice;
+//            } else if (pos >= lastReadPos && pos <= lastReadPos + lastBuffer.limit()) {
+//                LAST_HALF_CNT.incrementAndGet();
+//            }
 //        }
-
-        int read = outputNio.read(allocate, pos);
-        allocate.flip();
-        allocate = allocate.slice();
-        allocate.limit(Math.min(read, size));
-
-//        int read = inputRandomAccessFile.read(allocate.array());
-//        allocate.limit(read);
-        inputBioPos += read;
-        return allocate;
+//        ByteBuffer allocate;
+////        if (size <= lastBuffer.capacity()) {
+////            lastBuffer.clear();
+////            allocate = lastBuffer;
+////            lastReadPos = pos;
+////        } else {
+//            allocate = ByteBuffer.allocate(size);
+////        }
+//
+//        int read = outputNio.read(allocate, pos);
+//        allocate.flip();
+//        allocate = allocate.slice();
+//        allocate.limit(Math.min(read, size));
+//
+////        int read = inputRandomAccessFile.read(allocate.array());
+////        allocate.limit(read);
+//        inputBioPos += read;
+//        return allocate;
     }
 //    }
 }

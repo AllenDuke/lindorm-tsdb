@@ -107,14 +107,13 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             throw new RuntimeException("获取buffer future failed.", e);
         }
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-        int posInBatch = 0;
+        long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);
-            long itemNum = posInBatch + LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
             if (batchItemSet.contains(itemNum)) {
                 columnItemList.add(new ColumnItem<>(column, itemNum));
             }
-            posInBatch++;
+            itemNum++;
         } while (byteBuffer.hasRemaining());
         return columnItemList;
     }

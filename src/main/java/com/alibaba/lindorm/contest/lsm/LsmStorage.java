@@ -407,7 +407,7 @@ public class LsmStorage {
 //            if (!notCheckRowList.isEmpty()) {
 //                insert(notCheckRowList);
 //            }
-            if (rowBuffer != null && rowBuffer.hasRemaining()) {
+            if (rowBuffer != null && rowBuffer.position() > 0) {
                 insert();
 
                 CommonUtils.UNSAFE.invokeCleaner(rowBuffer);

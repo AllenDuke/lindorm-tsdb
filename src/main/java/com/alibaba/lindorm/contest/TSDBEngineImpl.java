@@ -38,6 +38,8 @@ public class TSDBEngineImpl extends TSDBEngine {
 
     private Thread flusher;
 
+    AtomicLong cnt = new AtomicLong(0);
+
     private void initFlusher() {
         flusher = new Thread(() -> {
             while (connected) {
@@ -210,6 +212,9 @@ public class TSDBEngineImpl extends TSDBEngine {
     public void write(WriteRequest wReq) throws IOException {
         try {
             for (Row row : wReq.getRows()) {
+//                if (row.getVin().equals(new Vin("LSVNV2182E0541854".getBytes())) && cnt.incrementAndGet() %3600==0) {
+//                    System.out.println(row);
+//                }
                 Vin vin = row.getVin();
                 ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
                 lock.writeLock().lock();

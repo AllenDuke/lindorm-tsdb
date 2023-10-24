@@ -8,7 +8,7 @@ import java.util.List;
  * Decompresses a compressed stream created by the Compressor. Returns pairs of timestamp and floating point value.
  *
  */
-public class ChimpDecompressor {
+public class ChimpDecompressor implements IDecompressor {
 
     private int storedLeadingZeros = Integer.MAX_VALUE;
     private int storedTrailingZeros = 0;
@@ -26,7 +26,8 @@ public class ChimpDecompressor {
         in = new InputBitStream(bs);
     }
 
-    public List<Double> getValues() {
+    @Override
+    public List<Double> decompress() {
         List<Double> list = new LinkedList<>();
         Double value = readValue();
         while (value != null) {

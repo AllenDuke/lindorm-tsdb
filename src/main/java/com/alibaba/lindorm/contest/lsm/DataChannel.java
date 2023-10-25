@@ -106,7 +106,9 @@ public class DataChannel {
         nioFlushBuffer();
     }
 
-    private void writeByte(byte b) throws IOException {
+    public void writeByte(byte b) throws IOException {
+        size++;
+        isDirty = true;
         if (ioMode == 3) {
             nioCheckAndFlushBuffer();
             lastBuffer.put(b);

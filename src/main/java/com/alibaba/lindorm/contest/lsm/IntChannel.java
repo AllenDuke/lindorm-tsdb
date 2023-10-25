@@ -89,8 +89,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             List<Integer> ints = this.rzInt(byteBuffer);
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Set<Long> set = batchTimeItemSetMap.get(batchNum);
             for (Integer cur : ints) {
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
+                if (set.contains(itemNum)) {
                     columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(cur), itemNum));
                 }
                 itemNum++;
@@ -136,9 +137,13 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
             List<Integer> ints = this.rzInt(byteBuffer);
+            // 减少乘法计算
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            // 减少hash计算
+            Set<Long> set = batchTimeItemSetMap.get(batchNum);
             for (Integer cur : ints) {
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.IntegerColumn(cur)))) {
+                // 减少对象生成
+                if (set.contains(itemNum) && (columnFilter == null || compare(columnFilter, cur))) {
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);
@@ -148,7 +153,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         }
 
         for (ColumnValue.IntegerColumn columnValue : notcheckList) {
-            if (columnFilter == null || columnFilter.doCompare(columnValue)) {
+            if (columnFilter == null || compare(columnFilter, columnValue.getIntegerValue())) {
                 sum += columnValue.getIntegerValue();
                 validCount++;
                 max = Math.max(max, columnValue.getIntegerValue());
@@ -248,5 +253,15 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     public int zigZagDecode(int i) {
         return ((i >>> 1) ^ -(i & 1));
+    }
+
+    private boolean compare(CompareExpression columnFilter, int i) {
+        if (columnFilter.getCompareOp() == CompareExpression.CompareOp.EQUAL) {
+            return columnFilter.getValue().getIntegerValue() == i;
+        }
+        if (columnFilter.getCompareOp() == CompareExpression.CompareOp.GREATER) {
+            return columnFilter.getValue().getIntegerValue() < i;
+        }
+        return false;
     }
 }

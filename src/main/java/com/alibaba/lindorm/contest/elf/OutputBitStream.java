@@ -127,7 +127,7 @@ public class OutputBitStream implements Flushable, Closeable {
 	/** Current number of free bits in the bit buffer (the bits in the buffer are stored high). */
 	protected int free;
 	/** Current position in the byte buffer. */
-	protected int pos;
+	public int pos;
 	/** Current position of the underlying output stream. */
 	protected long position;
 	/** Current number of bytes available in the byte buffer. */

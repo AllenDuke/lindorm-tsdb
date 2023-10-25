@@ -5,6 +5,7 @@ import com.alibaba.lindorm.contest.elf.IDecompressor;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;

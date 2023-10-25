@@ -98,8 +98,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             List<Double> doubles = unElf(byteBuffer);
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Set<Long> set = batchTimeItemSetMap.get(batchNum);
             for (Double last : doubles) {
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum)) {
+                if (set.contains(itemNum)) {
                     columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(last), itemNum));
                 }
                 itemNum++;
@@ -140,8 +141,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             }
             List<Double> doubles = unElf(byteBuffer);
             long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Set<Long> set = batchTimeItemSetMap.get(batchNum);
             for (Double last : doubles) {
-                if (batchTimeItemSetMap.get(batchNum).contains(itemNum) && (columnFilter == null || columnFilter.doCompare(new ColumnValue.DoubleFloatColumn(last)))) {
+                if (set.contains(itemNum) && (columnFilter == null || compare(columnFilter, last))) {
                     sum += last;
                     validCount++;
                     max = Math.max(last, max);
@@ -152,7 +154,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         }
 
         for (ColumnValue.DoubleFloatColumn columnValue : notcheckList) {
-            if (columnFilter == null || columnFilter.doCompare(columnValue)) {
+            if (columnFilter == null || compare(columnFilter, columnValue.getDoubleFloatValue())) {
                 sum += columnValue.getDoubleFloatValue();
                 validCount++;
                 max = Math.max(max, columnValue.getDoubleFloatValue());
@@ -182,7 +184,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     public byte[] elf(List<ColumnValue.DoubleFloatColumn> doubleFloatColumns) throws IOException {
-        ICompressor compressor = new ElfOnChimpCompressor(DataChannel.BUFFER_SIZE * 4);
+        ICompressor compressor = new ChimpCompressor(DataChannel.BUFFER_SIZE * 4);
         for (ColumnValue.DoubleFloatColumn doubleFloatColumn : doubleFloatColumns) {
             double v = doubleFloatColumn.getDoubleFloatValue();
             compressor.addValue(v);
@@ -198,8 +200,18 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     public List<Double> unElf(ByteBuffer buffer) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
-        IDecompressor decompressor = new ElfOnChimpDecompressor(array1);
+        IDecompressor decompressor = new ChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();
         return values;
+    }
+
+    private boolean compare(CompareExpression columnFilter, double i) {
+        if (columnFilter.getCompareOp() == CompareExpression.CompareOp.EQUAL) {
+            return columnFilter.getValue().getDoubleFloatValue() == i;
+        }
+        if (columnFilter.getCompareOp() == CompareExpression.CompareOp.GREATER) {
+            return columnFilter.getValue().getDoubleFloatValue() < i;
+        }
+        return false;
     }
 }

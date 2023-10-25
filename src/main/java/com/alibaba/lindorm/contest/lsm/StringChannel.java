@@ -5,7 +5,6 @@ import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
 import com.alibaba.lindorm.contest.util.ByteBufferUtil;
-import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -28,75 +27,21 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         super(vinDir, column, columnFile, columnOutput);
     }
 
-    private int encode = -1;
-
     @Override
     protected void append0(List<ColumnValue.StringColumn> stringColumns) throws IOException {
         int size = 0;
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             size += 4 + stringColumn.getStringValue().limit();
         }
-        byte[] bytes = null;
-        if (encode == 0) {
-            byte[] zstd = zstd(stringColumns, size);
-            bytes = zstd;
-        }
-        if (encode == 1) {
-            byte[] hash = hash(stringColumns);
-            bytes = hash;
-        }
-        if (encode == -1) {
-            byte[] zstd = zstd(stringColumns, size);
-            byte[] hash = hash(stringColumns);
-            if (zstd.length <= hash.length) {
-                bytes = zstd;
-                encode = 0;
-            } else {
-                bytes = hash;
-                encode = 1;
-            }
-        }
-        columnOutput.writeByte((byte) encode);
-        batchSize = bytes.length + 1;
-        columnOutput.writeBytes(bytes);
-        ORIG_SIZE.getAndAdd(size);
-    }
-
-    private byte[] zstd(List<ColumnValue.StringColumn> stringColumns, int size) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(size);
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             buffer.putInt(stringColumn.getStringValue().limit());
             buffer.put(stringColumn.getStringValue());
         }
         byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
-        return bytes;
-    }
-
-    private byte[] hash(List<ColumnValue.StringColumn> stringColumns) throws IOException {
-        int size = 0;
-        // 488288
-        Map<ByteBuffer, Integer> map = new LinkedHashMap<>(stringColumns.size() >> 2);
-        List<Integer> ints = new ArrayList<>(stringColumns.size());
-        for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            Integer integer = map.get(stringColumn.getStringValue());
-            if (integer != null) {
-                ints.add(integer);
-            } else {
-                ints.add(map.size());
-                map.put(stringColumn.getStringValue(), map.size());
-                size += 4 + stringColumn.getStringValue().limit();
-            }
-        }
-        ByteBuffer zInt = NumberUtil.zInt(ints);
-        ByteBuffer buffer = ByteBuffer.allocate(4 + zInt.limit() + size);
-        buffer.putInt(zInt.limit());
-        buffer.put(zInt);
-        for (ByteBuffer byteBuffer : map.keySet()) {
-            buffer.putInt(byteBuffer.limit());
-            buffer.put(byteBuffer);
-        }
-        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
-        return bytes;
+        batchSize = bytes.length;
+        columnOutput.writeBytes(bytes);
+        ORIG_SIZE.getAndAdd(size);
     }
 
     @Override
@@ -161,45 +106,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         } catch (Exception e) {
             throw new RuntimeException("获取buffer future failed.", e);
         }
-        byte b = byteBuffer.get();
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-        if (b == 0) {
-            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            do {
-                ColumnValue.StringColumn column = readFrom(byteBuffer);
-                if (batchItemSet.contains(itemNum)) {
-                    columnItemList.add(new ColumnItem<>(column, itemNum));
-                }
-                itemNum++;
-            } while (byteBuffer.hasRemaining());
-            return columnItemList;
-        }
-        int intSize = byteBuffer.getInt();
-        ByteBuffer slice = byteBuffer.slice();
-        slice.limit(intSize);
-        List<Integer> ints = NumberUtil.rzInt(slice);
-        byteBuffer.position(4 + intSize);
-        Map<Integer, ColumnValue.StringColumn> map = new HashMap<>(ints.size() >> 2);
-        long itemNum = LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
-        int idx = 0;
+        long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);
             if (batchItemSet.contains(itemNum)) {
                 columnItemList.add(new ColumnItem<>(column, itemNum));
             }
-            map.put(idx, column);
             itemNum++;
-            idx++;
         } while (byteBuffer.hasRemaining());
-
-        itemNum = LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
-        for (int i = 0; i < ints.size(); i++) {
-            if (batchItemSet.contains(itemNum)) {
-                columnItemList.add(new ColumnItem<>(map.get(ints.get(i)), itemNum));
-            }
-            itemNum++;
-        }
-
         return columnItemList;
     }
 
@@ -230,3 +145,4 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         super.shutdown();
     }
 }
+

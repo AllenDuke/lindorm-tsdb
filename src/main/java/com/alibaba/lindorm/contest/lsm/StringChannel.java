@@ -181,13 +181,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         byteBuffer.position(4 + intSize);
         Map<Integer, ColumnValue.StringColumn> map = new HashMap<>(ints.size() >> 2);
         long itemNum = LsmStorage.MAX_ITEM_CNT_L0 * batchNum;
+        int idx = 0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);
             if (batchItemSet.contains(itemNum)) {
                 columnItemList.add(new ColumnItem<>(column, itemNum));
             }
-            map.put((int) itemNum, column);
+            map.put(idx, column);
             itemNum++;
+            idx++;
         } while (byteBuffer.hasRemaining());
 
         itemNum = LsmStorage.MAX_ITEM_CNT_L0 * batchNum;

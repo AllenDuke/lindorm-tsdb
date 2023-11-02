@@ -53,7 +53,7 @@ public class TimeChannel {
             timeFile.createNewFile();
         }
 
-        timeOutput = new DataChannel(timeFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+        timeOutput = new DataChannel(timeFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
         timeInput = new RandomAccessFile(timeFile, "r");
 
         vinStr = vinDir.getName();

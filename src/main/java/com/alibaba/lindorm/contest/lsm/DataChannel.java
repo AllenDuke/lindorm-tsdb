@@ -74,7 +74,7 @@ public class DataChannel {
 //            inputBioStream = new FileInputStream(dataFile); 
 
             // 5000个vin 60+1列，这里需要2.5GB todo 池化 资源管理 flush的时候归还
-            lastBuffer = ByteBuffer.allocateDirect(Math.max(nioBuffersSize / 1024 + 1024, BUFFER_SIZE));
+            lastBuffer = ByteBuffer.allocateDirect(nioBuffersSize * 1024);
         } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);
         } else {

@@ -115,13 +115,13 @@ public class LsmStorage {
                 latestTime = metaChannel.map(FileChannel.MapMode.READ_ONLY, 0, 8).getLong();
             }
 
-            File columnFile = new File(dir.getAbsolutePath(), "column.data");
-            if (!columnFile.exists()) {
-                columnFile.createNewFile();
-            }
-            DataChannel columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
 
             for (TableSchema.Column column : tableSchema.getColumnList()) {
+                File columnFile = new File(dir.getAbsolutePath(), column.columnName + ".data");
+                if (!columnFile.exists()) {
+                    columnFile.createNewFile();
+                }
+                DataChannel columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 4, LsmStorage.OUTPUT_BUFFER_SIZE);
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
                     columnChannelMap.put(column.columnName, new IntChannel(dir, column, columnFile, columnOutput));
@@ -144,7 +144,7 @@ public class LsmStorage {
             if (!columnIndexFile.exists()) {
                 columnIndexFile.createNewFile();
             }
-            columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 8, LsmStorage.OUTPUT_BUFFER_SIZE);
+            columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
 
             loadAllColumnIndexForInit();
 

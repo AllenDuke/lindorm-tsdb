@@ -58,7 +58,7 @@ public class NumberUtil {
         buffer.putInt(last);
         for (int i = 2; i < ints.size(); i++) {
             int v = ints.get(i);
-            v = zigZagEncode(ints.get(i)- last - (last - lastPre));
+            v = zigZagEncode(ints.get(i) - last - (last - lastPre));
             while ((v & ~0x7F) != 0) {
                 buffer.put((byte) ((v & 0x7F) | 0x80));
                 v >>>= 7;
@@ -66,6 +66,27 @@ public class NumberUtil {
             buffer.put((byte) v);
             lastPre = last;
             last = ints.get(i);
+        }
+        buffer.flip();
+        return buffer;
+    }
+
+    public static ByteBuffer zInt(int[] ints) {
+        ByteBuffer buffer = ByteBuffer.allocate(ints.length * 5);
+        int lastPre = ints[0];
+        buffer.putInt(lastPre);
+        int last = ints[1];
+        buffer.putInt(last);
+        for (int i = 2; i < ints.length; i++) {
+            int v = ints[i];
+            v = zigZagEncode(ints[i] - last - (last - lastPre));
+            while ((v & ~0x7F) != 0) {
+                buffer.put((byte) ((v & 0x7F) | 0x80));
+                v >>>= 7;
+            }
+            buffer.put((byte) v);
+            lastPre = last;
+            last = ints[i];
         }
         buffer.flip();
         return buffer;

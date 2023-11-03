@@ -116,7 +116,7 @@ public class LsmStorage {
             }
 
 
-            File columnFile = new File(dir.getAbsolutePath(),  "column.data");
+            File columnFile = new File(dir.getAbsolutePath(), "column.data");
             if (!columnFile.exists()) {
                 columnFile.createNewFile();
             }
@@ -183,12 +183,15 @@ public class LsmStorage {
 
         Map<String, List<ColumnValue>> columnValuesMap = new HashMap<>(columnChannelMap.size());
         int rowSize = rowList.size();
+        long[] times = new long[rowSize];
+        int i = 0;
         for (Row cur : rowList) {
-            timeChannel.append(cur.getTimestamp());
+            times[i++] = cur.getTimestamp();
             for (String columnName : columnChannelMap.keySet()) {
                 columnValuesMap.computeIfAbsent(columnName, v -> new ArrayList<>(rowSize)).add(cur.getColumns().get(columnName));
             }
         }
+        timeChannel.append(times);
         timeChannel.index();
         checkTime = latestTime;
 

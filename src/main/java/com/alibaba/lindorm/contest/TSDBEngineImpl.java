@@ -195,6 +195,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             columnsType.clear();
             tableSchema = null;
             connected = false;
+            System.out.println("time列原大小：" + TimeChannel.ORIG_SIZE.get() + "，实际大小：" + TimeChannel.REAL_SIZE.get() + "，压缩率：" + (double) TimeChannel.REAL_SIZE.get() / TimeChannel.ORIG_SIZE.get());
             System.out.println("int列原大小：" + IntChannel.ORIG_SIZE.get() + "，实际大小：" + IntChannel.REAL_SIZE.get() + "，压缩率：" + (double) IntChannel.REAL_SIZE.get() / IntChannel.ORIG_SIZE.get());
             System.out.println("string列原大小：" + StringChannel.ORIG_SIZE.get() + "，实际大小：" + StringChannel.REAL_SIZE.get() + "，压缩率：" + (double) StringChannel.REAL_SIZE.get() / StringChannel.ORIG_SIZE.get());
             System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());

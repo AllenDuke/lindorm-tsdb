@@ -1,6 +1,8 @@
 package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
+import com.alibaba.lindorm.contest.util.ByteBufferUtil;
+import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -13,6 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TimeChannel {
+
+    public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
+    public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
     private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 2 + 8;
 
@@ -47,6 +52,9 @@ public class TimeChannel {
 
     private int loadedAllIndexForInit = -1;
 
+    private long batchPos;
+    private int batchSize;
+
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time.data");
         if (!timeFile.exists()) {
@@ -68,26 +76,33 @@ public class TimeChannel {
         loadAllIndexForInit();
     }
 
-    public void append(long time) throws IOException {
+    public void append(long[] times) throws IOException {
+        ORIG_SIZE.addAndGet(8L * times.length);
         isDirty = true;
-        if (batchItemCount == 0) {
-            minTime = time;
-            maxTime = time;
+
+        batchPos = timeOutput.channelSize();
+
+        REAL_SIZE.addAndGet(8);
+        minTime = times[0];
+        maxTime = times[0];
+        lastTime = times[0];
+        // 919721
+        int[] ints = new int[times.length - 1];
+        for (int i = 1; i < times.length; i++) {
+            long time = times[i];
+            minTime = Math.min(minTime, time);
+            maxTime = Math.max(maxTime, time);
+            ints[i - 1] = (int) (time - lastTime);
             lastTime = time;
-
-            timeOutput.writeLong(time);
-
-            batchItemCount++;
-            return;
         }
-        minTime = Math.min(minTime, time);
-        maxTime = Math.max(maxTime, time);
+        timeOutput.writeLong(times[0]);
+        ByteBuffer byteBuffer = NumberUtil.zInt(ints);
+        byte[] bytes = ByteBufferUtil.gZip(byteBuffer.array());
+        timeOutput.writeBytes(bytes);
+        REAL_SIZE.addAndGet(bytes.length);
 
-        // todo 变长编码
-        timeOutput.writeShort((short) (time - lastTime));
-
-        lastTime = time;
-        batchItemCount++;
+        batchItemCount = times.length;
+        batchSize = 8 + bytes.length;
     }
 
     public void shutdown() throws IOException {
@@ -111,9 +126,11 @@ public class TimeChannel {
 
     public void index() throws IOException {
         // 输出主键稀疏索引 todo maxTime_delta, delta_bf
-        TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime);
+        TimeIndexItem timeIndexItem = new TimeIndexItem(minTime, maxTime, batchPos, batchSize);
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMinTime());
         CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getMaxTime());
+        CommonUtils.writeLong(timeIndexOutput, timeIndexItem.getPos());
+        CommonUtils.writeInt(timeIndexOutput, timeIndexItem.getSize());
         timeIndexItemList.add(timeIndexItem);
         indexFileSize += TimeIndexItem.SIZE;
 
@@ -140,7 +157,9 @@ public class TimeChannel {
         for (int i = 0; i < indexItemCount; i++) {
             long minTime = byteBuffer.getLong();
             long maxTime = byteBuffer.getLong();
-            timeIndexItemList.add(new TimeIndexItem(minTime, maxTime));
+            long pos = byteBuffer.getLong();
+            int size = byteBuffer.getInt();
+            timeIndexItemList.add(new TimeIndexItem(minTime, maxTime, pos, size));
         }
         loadedAllIndexForInit = timeIndexItemList.size();
         return timeIndexItemList;
@@ -234,20 +253,24 @@ public class TimeChannel {
 //        int read = timeInput.read(byteBuffer.array());
 //        byteBuffer.limit(read);
 
-        ByteBuffer byteBuffer = timeOutput.read((long) batchNum * FULL_BATCH_SIZE, FULL_BATCH_SIZE);
+        TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
 
+        ByteBuffer byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
         int pos = 0;
         long last = byteBuffer.getLong();
         if (last >= l && last < r) {
             timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
         }
         pos++;
-        while (byteBuffer.remaining() > 0) {
-            last = last + byteBuffer.getShort();
+        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+        List<Integer> ints = NumberUtil.rzInt(byteBuffer);
+        for (Integer delta : ints) {
+            last = last + delta;
             if (last >= l && last < r) {
                 timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
             }
             pos++;
+
         }
         return timeItemList;
     }

@@ -97,12 +97,12 @@ public class TimeChannel {
         }
         timeOutput.writeLong(times[0]);
         ByteBuffer byteBuffer = NumberUtil.zInt(ints);
-        byte[] bytes = ByteBufferUtil.gZip(byteBuffer.array());
+        byte[] bytes = ByteBufferUtil.zstdEncode(byteBuffer);
         timeOutput.writeBytes(bytes);
-        REAL_SIZE.addAndGet(bytes.length);
 
         batchItemCount = times.length;
         batchSize = 8 + bytes.length;
+        REAL_SIZE.addAndGet(batchSize);
     }
 
     public void shutdown() throws IOException {
@@ -262,7 +262,7 @@ public class TimeChannel {
             timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
         }
         pos++;
-        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         List<Integer> ints = NumberUtil.rzInt(byteBuffer);
         for (Integer delta : ints) {
             last = last + delta;

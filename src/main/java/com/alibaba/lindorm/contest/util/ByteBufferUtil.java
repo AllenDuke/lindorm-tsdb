@@ -67,6 +67,9 @@ public class ByteBufferUtil {
         return unGZip(array1);
     }
 
+    public static byte[] zstdEncode(ByteBuffer buffer) throws IOException {
+        return Zstd.compress(toBytes(buffer));
+    }
 
     public static byte[] zstdEncode(byte[] array1) throws IOException {
         return Zstd.compress(array1);

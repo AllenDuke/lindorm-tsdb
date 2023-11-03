@@ -2,6 +2,7 @@ package com.alibaba.lindorm.contest.lsm;
 
 import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.structs.*;
+import com.alibaba.lindorm.contest.util.ByteBufferUtil;
 import com.alibaba.lindorm.contest.util.RowUtil;
 
 import java.io.*;
@@ -237,56 +238,26 @@ public class LsmStorage {
         if (loadedAllColumnIndexForInit != -1) {
             return;
         }
-        Set<String> columnNameSet = columnChannelMap.keySet();
-        List<TimeIndexItem> timeIndexItemList = timeChannel.loadAllIndexForInit();
-        List<TimeItem> timeItemList = new ArrayList<>();
-        int indexItemCount = timeIndexItemList.size();
-        for (int i = 0; i < indexItemCount; i++) {
-            timeItemList.add(new TimeItem(0, (long) LsmStorage.MAX_ITEM_CNT_L0 * i));
-        }
-        for (String columnName : columnNameSet) {
-            columnIndexMap.put(columnName, loadColumnIndex(timeItemList, columnName));
-        }
-        loadedAllColumnIndexForInit = indexItemCount;
-    }
-
-    private Map<Long, ColumnIndexItem> loadColumnIndex(List<TimeItem> timeItemList, String columnName) throws IOException {
-        columnIndexChannel.flush();
-        Map<Long, ColumnIndexItem> columnIndexItemMap = new HashMap<>();
-        Set<Long> batchNumSet = timeItemList.stream().map(TimeItem::getBatchNum).collect(Collectors.toSet());
-        List<Long> batchNumList = batchNumSet.stream().sorted().collect(Collectors.toList());
-        if (batchNumList.isEmpty()) {
-            // 还没有数据
-            return columnIndexItemMap;
-        }
-        long pos = batchNumList.get(0) * columnIndexItemSize;
-        int size = (int) ((batchNumList.get(batchNumList.size() - 1) - batchNumList.get(0) + 1) * columnIndexItemSize);
-        if (pos >= columnIndexChannel.channelSize()) {
-            // 这是半包批次，没有写入列索引文件，靠各列自行恢复
-            return columnIndexItemMap;
-        }
-        ByteBuffer byteBuffer = columnIndexChannel.read(pos, size);
-        int begin = 0;
         for (TableSchema.Column column : tableSchema.getColumnList()) {
-            if (column.columnName.equals(columnName)) {
-                break;
-            }
-            begin += column.indexSize;
+            columnIndexMap.put(column.columnName, new HashMap<>());
         }
-        int i = 0;
-        while (byteBuffer.hasRemaining() && i < batchNumList.size()) {
-            int indexBegin = i * columnIndexItemSize + begin;
-            if (indexBegin >= byteBuffer.limit()) {
-                i++;
-                continue;
-            }
-            byteBuffer.position(indexBegin);
-            ColumnChannel columnChannel = columnChannelMap.get(columnName);
-            ColumnIndexItem columnIndexItem = columnChannel.readColumnIndexItem(byteBuffer);
-            columnIndexItemMap.put(batchNumList.get(i), columnIndexItem);
-            i++;
+        if (columnIndexChannel.channelSize() == 0) {
+            return;
         }
-        return columnIndexItemMap;
+        ByteBuffer byteBuffer = columnIndexChannel.read(0L, (int) columnIndexChannel.channelSize());
+        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
+        long batchNum = 0;
+        while (byteBuffer.hasRemaining()) {
+            for (TableSchema.Column column : tableSchema.getColumnList()) {
+                Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
+                ColumnChannel columnChannel = columnChannelMap.get(column.columnName);
+                ColumnIndexItem columnIndexItem = columnChannel.readColumnIndexItem(byteBuffer);
+                columnIndexItemMap.put(batchNum, columnIndexItem);
+            }
+            batchNum++;
+        }
+
+        loadedAllColumnIndexForInit = (int) batchNum;
     }
 
     public Row agg(long l, long r, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
@@ -405,6 +376,23 @@ public class LsmStorage {
         }
     }
 
+    private void columnIndexOutput() throws IOException {
+        int batchIndexCount = timeChannel.batchIndexCount();
+        ByteBuffer allocate = ByteBuffer.allocate(batchIndexCount * columnIndexItemSize);
+        for (int i = 0; i < batchIndexCount; i++) {
+            for (TableSchema.Column column : tableSchema.getColumnList()) {
+                Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
+                ColumnIndexItem columnIndexItem = columnIndexItemMap.get((long) i);
+                columnIndexItem.write(allocate);
+            }
+        }
+
+        byte[] bytes = ByteBufferUtil.zstdEncode(allocate.flip());
+        columnIndexChannel.writeBytes(bytes);
+        columnIndexChannel.flush();
+        columnIndexChannel.close();
+    }
+
     public void shutdown() {
         try {
 //            if (!notCheckRowList.isEmpty()) {
@@ -449,8 +437,8 @@ public class LsmStorage {
 //                    break;
 //                }
 //            }
-            columnIndexChannel.flush();
-            columnIndexChannel.close();
+
+            columnIndexOutput();
 
             timeChannel.shutdown();
             for (ColumnChannel columnChannel : columnChannelMap.values()) {

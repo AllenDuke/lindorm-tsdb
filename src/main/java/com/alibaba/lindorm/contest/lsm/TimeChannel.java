@@ -19,8 +19,6 @@ public class TimeChannel {
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
-    private static final int FULL_BATCH_SIZE = (LsmStorage.MAX_ITEM_CNT_L0 - 1) * 2 + 8;
-
     private final DataChannel timeOutput;
 
     private final File timeFile;
@@ -285,5 +283,9 @@ public class TimeChannel {
 
     public long getIndexFileSize() {
         return indexFileSize;
+    }
+
+    public int batchIndexCount() {
+        return timeIndexItemList.size();
     }
 }

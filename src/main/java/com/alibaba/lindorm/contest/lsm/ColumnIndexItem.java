@@ -1,5 +1,6 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public abstract class ColumnIndexItem {
@@ -36,4 +37,6 @@ public abstract class ColumnIndexItem {
     public int getBatchItemCount() {
         return batchItemCount;
     }
+
+    public abstract void write(ByteBuffer byteBuffer) throws IOException;
 }

@@ -61,12 +61,12 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
-        columnIndexChannel.writeDouble(batchSum);
-        columnIndexChannel.writeDouble(batchMax);
-        columnIndexChannel.writeLong(batchPos);
-        columnIndexChannel.writeInt(batchSize);
-        columnIndexChannel.writeInt(batchMaxScale);
-        columnIndexChannel.writeInt(batchItemCount);
+//        columnIndexChannel.writeDouble(batchSum);
+//        columnIndexChannel.writeDouble(batchMax);
+//        columnIndexChannel.writeLong(batchPos);
+//        columnIndexChannel.writeInt(batchSize);
+//        columnIndexChannel.writeInt(batchMaxScale);
+//        columnIndexChannel.writeInt(batchItemCount);
 
         columnIndexItemMap.put((long) columnIndexItemMap.size(), new DoubleIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchMaxScale, batchItemCount));
 

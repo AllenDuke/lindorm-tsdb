@@ -1,5 +1,6 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class StringIndexItem extends ColumnIndexItem {
@@ -14,5 +15,12 @@ public class StringIndexItem extends ColumnIndexItem {
         allocate.putLong(getPos());
         allocate.putInt(getSize());
         return allocate.array();
+    }
+
+    @Override
+    public void write(ByteBuffer byteBuffer) throws IOException {
+        byteBuffer.putLong(getPos());
+        byteBuffer.putInt(getSize());
+        byteBuffer.putInt(getBatchItemCount());
     }
 }

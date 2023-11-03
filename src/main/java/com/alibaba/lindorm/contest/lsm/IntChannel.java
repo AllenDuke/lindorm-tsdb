@@ -52,11 +52,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     @Override
     protected void index(DataChannel columnIndexChannel, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
-        columnIndexChannel.writeLong(batchSum);
-        columnIndexChannel.writeInt(batchMax);
-        columnIndexChannel.writeLong(batchPos);
-        columnIndexChannel.writeInt(batchSize);
-        columnIndexChannel.writeInt(batchItemCount);
+//        columnIndexChannel.writeLong(batchSum);
+//        columnIndexChannel.writeInt(batchMax);
+//        columnIndexChannel.writeLong(batchPos);
+//        columnIndexChannel.writeInt(batchSize);
+//        columnIndexChannel.writeInt(batchItemCount);
 
         columnIndexItemMap.put((long) columnIndexItemMap.size(), new IntIndexItem(-1, batchPos, batchSize, batchSum, batchMax, batchItemCount));
 

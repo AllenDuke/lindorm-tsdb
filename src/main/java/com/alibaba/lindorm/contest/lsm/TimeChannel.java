@@ -55,6 +55,8 @@ public class TimeChannel {
     private long batchPos;
     private int batchSize;
 
+    private Map<Integer, ByteBuffer> byteBufferMap = new HashMap<>();
+
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time.data");
         if (!timeFile.exists()) {
@@ -253,9 +255,15 @@ public class TimeChannel {
 //        int read = timeInput.read(byteBuffer.array());
 //        byteBuffer.limit(read);
 
-        TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
+        ByteBuffer byteBuffer = byteBufferMap.get(batchNum);
+        if (byteBuffer != null) {
+            byteBuffer.clear();
+        } else {
+            TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
+            byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
+            byteBufferMap.put(batchNum, byteBuffer);
+        }
 
-        ByteBuffer byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
         int pos = 0;
         long last = byteBuffer.getLong();
         if (last >= l && last < r) {

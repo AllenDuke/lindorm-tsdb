@@ -6,13 +6,11 @@ import com.alibaba.lindorm.contest.structs.CompareExpression;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alibaba.lindorm.contest.TSDBEngineImpl.IO_EXECUTOR;
@@ -40,6 +38,8 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     protected int batchItemCount;
 
     protected boolean isDirty;
+
+    private Map<Integer, ByteBuffer> byteBufferMap = new ConcurrentHashMap<>();
 
     public ColumnChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
         this.columnFile = columnFile;
@@ -89,7 +89,16 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @return
      * @throws IOException
      */
-    protected Future<ByteBuffer> read(long pos, int size) throws IOException {
-        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
+    protected Future<ByteBuffer> read(long batchNum, long pos, int size) throws IOException {
+        return IO_EXECUTOR.submit(() -> {
+            ByteBuffer byteBuffer = byteBufferMap.get((int) batchNum);
+            if (byteBuffer != null) {
+                byteBuffer.clear();
+            } else {
+                byteBuffer = columnOutput.read(pos, size);
+                byteBufferMap.put((int) batchNum, byteBuffer);
+            }
+            return byteBuffer;
+        });
     }
 }

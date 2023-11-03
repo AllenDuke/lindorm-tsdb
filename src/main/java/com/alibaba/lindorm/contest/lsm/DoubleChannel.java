@@ -87,7 +87,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+            futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
         }
         for (Long batchNum : batchNumList) {
             ByteBuffer byteBuffer = null;
@@ -130,7 +130,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
         Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
-            futureMap.put(batchNum, read(columnIndexItem.getPos(), columnIndexItem.getSize()));
+            futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
         }
         for (Long batchNum : batchNumList) {
             ByteBuffer byteBuffer = null;

@@ -125,15 +125,15 @@ public class LsmStorage {
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
-                    columnChannelMap.put(column.columnName, new IntChannel(dir, column, columnFile, columnOutput));
+                    columnChannelMap.put(column.columnName, new IntChannel(vinStr.hashCode(), column, columnFile, columnOutput));
                     columnIndexItemSize += IntChannel.IDX_SIZE;
                     column.indexSize = IntChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-                    columnChannelMap.put(column.columnName, new DoubleChannel(dir, column, columnFile, columnOutput));
+                    columnChannelMap.put(column.columnName, new DoubleChannel(vinStr.hashCode(), column, columnFile, columnOutput));
                     columnIndexItemSize += DoubleChannel.IDX_SIZE;
                     column.indexSize = DoubleChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-                    columnChannelMap.put(column.columnName, new StringChannel(dir, column, columnFile, columnOutput));
+                    columnChannelMap.put(column.columnName, new StringChannel(vinStr.hashCode(), column, columnFile, columnOutput));
                     columnIndexItemSize += StringChannel.IDX_SIZE;
                     column.indexSize = StringChannel.IDX_SIZE;
                 } else {

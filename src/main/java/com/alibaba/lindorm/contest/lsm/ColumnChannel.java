@@ -6,10 +6,7 @@ import com.alibaba.lindorm.contest.structs.CompareExpression;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -21,6 +18,13 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public static AtomicLong AGG_CNT = new AtomicLong(0);
 
     public static AtomicLong AGG_LOG_CNT = new AtomicLong(0);
+
+    /**
+     * 所有vin共享一个大缓存池。
+     * BYTE_BUFFER_MAP，k高32位为vin.hashcode
+     */
+    private static final AtomicLong AVAILABLE = new AtomicLong(4L * 1024 * 1024 * 1024 + 512);
+    private static final Map<Long, ByteBuffer> BYTE_BUFFER_MAP = Collections.synchronizedMap(new LinkedHashMap<>());
 
     protected final File columnFile;
 
@@ -39,9 +43,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected boolean isDirty;
 
-    private Map<Integer, ByteBuffer> byteBufferMap = new ConcurrentHashMap<>();
+    private final int vinHashCode;
 
-    public ColumnChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+    public ColumnChannel(int vinHashCode, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+        this.vinHashCode = vinHashCode;
         this.columnFile = columnFile;
         this.columnOutput = columnOutput;
 //        columnInput = new RandomAccessFile(columnFile, "r");
@@ -81,6 +86,14 @@ public abstract class ColumnChannel<C extends ColumnValue> {
         isDirty = false;
     }
 
+    private long byteBufferMapK(long pos) {
+        // todo 换成vinId
+        long k = vinHashCode;
+        k = k << 32;
+        k = k | pos;
+        return k;
+    }
+
     /**
      * 需要clearColumnInput进行map清理，否则可能oom
      *
@@ -90,13 +103,25 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected Future<ByteBuffer> read(long batchNum, long pos, int size) throws IOException {
+//        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
         return IO_EXECUTOR.submit(() -> {
-            ByteBuffer byteBuffer = byteBufferMap.get((int) batchNum);
+            long k = byteBufferMapK(pos);
+            ByteBuffer byteBuffer = BYTE_BUFFER_MAP.get(k);
             if (byteBuffer != null) {
                 byteBuffer.clear();
             } else {
                 byteBuffer = columnOutput.read(pos, size);
-                byteBufferMap.put((int) batchNum, byteBuffer);
+                BYTE_BUFFER_MAP.put(k, byteBuffer);
+                AVAILABLE.addAndGet(-byteBuffer.capacity());
+                Iterator<Map.Entry<Long, ByteBuffer>> entryIterator = BYTE_BUFFER_MAP.entrySet().iterator();
+                while (entryIterator.hasNext()) {
+                    if (AVAILABLE.get() > 0) {
+                        break;
+                    }
+                    ByteBuffer remove = entryIterator.next().getValue();
+                    AVAILABLE.addAndGet(remove.capacity());
+                    entryIterator.remove();
+                }
             }
             return byteBuffer;
         });

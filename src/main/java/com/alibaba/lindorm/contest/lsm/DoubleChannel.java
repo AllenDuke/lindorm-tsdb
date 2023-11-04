@@ -35,8 +35,8 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     private int batchMaxScale = 12;
 
-    public DoubleChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
-        super(vinDir, column, columnFile, columnOutput);
+    public DoubleChannel(int vinHashCoder, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+        super(vinHashCoder, column, columnFile, columnOutput);
     }
 
     @Override

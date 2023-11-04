@@ -27,8 +27,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     private int batchMax;
 
-    public IntChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
-        super(vinDir, column, columnFile, columnOutput);
+    public IntChannel(int vinHashCode, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+        super(vinHashCode, column, columnFile, columnOutput);
     }
 
     @Override

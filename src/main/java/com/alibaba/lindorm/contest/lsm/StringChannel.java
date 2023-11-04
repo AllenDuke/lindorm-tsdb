@@ -23,8 +23,8 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
 
-    public StringChannel(File vinDir, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
-        super(vinDir, column, columnFile, columnOutput);
+    public StringChannel(int vinHashCode, TableSchema.Column column, File columnFile, DataChannel columnOutput) throws IOException {
+        super(vinHashCode, column, columnFile, columnOutput);
     }
 
     @Override

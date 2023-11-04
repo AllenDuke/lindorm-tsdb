@@ -1,6 +1,7 @@
 package com.alibaba.lindorm.contest.elf;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -28,7 +29,7 @@ public class ChimpDecompressor implements IDecompressor {
 
     @Override
     public List<Double> decompress() {
-        List<Double> list = new LinkedList<>();
+        List<Double> list = new ArrayList<>();
         Double value = readValue();
         while (value != null) {
             list.add(value);

@@ -23,7 +23,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * 所有vin共享一个大缓存池。
      * BYTE_BUFFER_MAP，k高32位为vin.hashcode
      */
-    private static final AtomicLong AVAILABLE = new AtomicLong(4L * 1024 * 1024 * 1024 + 512);
+    private static final AtomicLong AVAILABLE = new AtomicLong(3L * 1024 * 1024 * 1024);
     private static final Map<Long, ByteBuffer> BYTE_BUFFER_MAP = Collections.synchronizedMap(new LinkedHashMap<>());
 
     protected final File columnFile;
@@ -113,14 +113,17 @@ public abstract class ColumnChannel<C extends ColumnValue> {
                 byteBuffer = columnOutput.read(pos, size);
                 BYTE_BUFFER_MAP.put(k, byteBuffer);
                 AVAILABLE.addAndGet(-byteBuffer.capacity());
-                Iterator<Map.Entry<Long, ByteBuffer>> entryIterator = BYTE_BUFFER_MAP.entrySet().iterator();
-                while (entryIterator.hasNext()) {
-                    if (AVAILABLE.get() > 0) {
-                        break;
+                synchronized (BYTE_BUFFER_MAP) {
+                    // 避免并发修改
+                    Iterator<Map.Entry<Long, ByteBuffer>> entryIterator = BYTE_BUFFER_MAP.entrySet().iterator();
+                    while (entryIterator.hasNext()) {
+                        if (AVAILABLE.get() > 0) {
+                            break;
+                        }
+                        ByteBuffer remove = entryIterator.next().getValue();
+                        AVAILABLE.addAndGet(remove.capacity());
+                        entryIterator.remove();
                     }
-                    ByteBuffer remove = entryIterator.next().getValue();
-                    AVAILABLE.addAndGet(remove.capacity());
-                    entryIterator.remove();
                 }
             }
             return byteBuffer;

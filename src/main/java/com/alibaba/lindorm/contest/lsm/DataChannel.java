@@ -344,9 +344,11 @@ public class DataChannel {
             return allocate;
         }
 
+
+
 //        if (ioMode == 2) {
-        MappedByteBuffer map = outputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
-        return map.load();
+//        MappedByteBuffer map = outputNio.map(FileChannel.MapMode.READ_ONLY, pos, Math.min(size, outputNio.size() - pos));
+//        return map.load();
 //        } else {
 //        if (inputBioPos != pos) {
 //            inputBioStream.close();
@@ -375,24 +377,24 @@ public class DataChannel {
 //                LAST_HALF_CNT.incrementAndGet();
 //            }
 //        }
-//        ByteBuffer allocate;
-////        if (size <= lastBuffer.capacity()) {
-////            lastBuffer.clear();
-////            allocate = lastBuffer;
-////            lastReadPos = pos;
-////        } else {
-//            allocate = ByteBuffer.allocate(size);
-////        }
-//
-//        int read = outputNio.read(allocate, pos);
-//        allocate.flip();
+        ByteBuffer allocate;
+//        if (size <= lastBuffer.capacity()) {
+//            lastBuffer.clear();
+//            allocate = lastBuffer;
+//            lastReadPos = pos;
+//        } else {
+            allocate = ByteBuffer.allocateDirect(size);
+//        }
+
+        int read = outputNio.read(allocate, pos);
+        allocate.flip();
 //        allocate = allocate.slice();
-//        allocate.limit(Math.min(read, size));
-//
-////        int read = inputRandomAccessFile.read(allocate.array());
-////        allocate.limit(read);
-//        inputBioPos += read;
-//        return allocate;
+        allocate.limit(Math.min(read, size));
+
+//        int read = inputRandomAccessFile.read(allocate.array());
+//        allocate.limit(read);
+        inputBioPos += read;
+        return allocate;
     }
 //    }
 }

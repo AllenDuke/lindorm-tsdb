@@ -44,7 +44,7 @@ public class TestMyDbReadOnlyMt {
         }
 
         TSDBEngine tsdbEngineSample = new TSDBEngineImpl(dataDir);
-        String str = "12345678912345678";
+        String str = "LSVNV2182E0541854";
 
         try {
             tsdbEngineSample.connect();
@@ -60,9 +60,9 @@ public class TestMyDbReadOnlyMt {
                         showResult(resultSet);
 
                         resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                                new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 10,
+                                new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + TestMyDb.ITEM_CNT - 1000000,
                                 TestMyDb.UTC + TestMyDb.ITEM_CNT));
-                        showResult(resultSet);
+//                        showResult(resultSet);
 
                         resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
                                 new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,

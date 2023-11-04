@@ -67,7 +67,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+    public List<ColumnItem<ColumnValue.IntegerColumn>> range(List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         columnOutput.flush();
 
         List<ColumnItem<ColumnValue.IntegerColumn>> columnItemList = new ArrayList<>(timeItemList.size());
@@ -88,13 +88,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
             List<Integer> ints = this.rzInt(byteBuffer);
-            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Set<Long> set = batchTimeItemSetMap.get(batchNum);
-            for (Integer cur : ints) {
-                if (set.contains(itemNum)) {
-                    columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(cur), itemNum));
-                }
-                itemNum++;
+            long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            for (Long itemNum : set) {
+                int idx = (int) (itemNum - begin);
+                columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx)), itemNum));
             }
         }
 
@@ -102,7 +100,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                            CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.IntegerColumn> notcheckList) throws IOException {
         long sum = 0;
         int validCount = 0;
@@ -138,17 +136,17 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             List<Integer> ints = this.rzInt(byteBuffer);
             // 减少乘法计算
-            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             // 减少hash计算
-            Set<Long> set = batchTimeItemSetMap.get(batchNum);
-            for (Integer cur : ints) {
-                // 减少对象生成
-                if (set.contains(itemNum) && (columnFilter == null || compare(columnFilter, cur))) {
+            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            for (Long itemNum : set) {
+                int idx = (int) (itemNum - begin);
+                int cur = ints.get(idx);
+                if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;
                     max = Math.max(max, cur);
                 }
-                itemNum++;
             }
         }
 

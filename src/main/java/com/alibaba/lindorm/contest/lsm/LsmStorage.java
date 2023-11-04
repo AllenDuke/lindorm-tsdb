@@ -284,12 +284,12 @@ public class LsmStorage {
 
         List<TimeItem> timeRange = timeChannel.agg(l, r);
         List<TimeItem> batch = new ArrayList<>();
-        Map<Long, Set<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
+        Map<Long, List<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
         for (TimeItem timeItem : timeRange) {
             if (timeItem.getTime() == 0) {
                 batch.add(timeItem);
             } else {
-                Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+                List<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new ArrayList<>());
                 timeItemSet.add(timeItem.getItemNum());
             }
         }
@@ -309,9 +309,9 @@ public class LsmStorage {
         ArrayList<Row> rowList = new ArrayList<>(timeRange.size());
         Map<String, List<ColumnValue>> columnValueListMap = new ConcurrentHashMap<>(columnChannelMap.size());
 
-        Map<Long, Set<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
+        Map<Long, List<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
         for (TimeItem timeItem : timeRange) {
-            Set<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new HashSet<>());
+            List<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new ArrayList<>());
             timeItemSet.add(timeItem.getItemNum());
         }
 

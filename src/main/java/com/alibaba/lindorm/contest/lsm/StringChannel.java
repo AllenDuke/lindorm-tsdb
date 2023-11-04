@@ -65,13 +65,13 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     @Override
-    public ColumnValue.StringColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public ColumnValue.StringColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                                         CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.StringColumn> notcheckList) throws IOException {
         throw new IllegalStateException("string类型不支持聚合");
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+    public List<ColumnItem<ColumnValue.StringColumn>> range(List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>(timeItemList.size());
@@ -95,7 +95,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         super.flush();
     }
 
-    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, Set<Long> batchItemSet, Future<ByteBuffer> bufferFuture) throws IOException {
+    private List<ColumnItem<ColumnValue.StringColumn>> range(long batchNum, long pos, int size, List<Long> batchItemSet, Future<ByteBuffer> bufferFuture) throws IOException {
         flush();
 
         List<ColumnItem<ColumnValue.StringColumn>> columnItemList = new ArrayList<>();
@@ -108,13 +108,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+        int nextIdx = 0;
         do {
             ColumnValue.StringColumn column = readFrom(byteBuffer);
-            if (batchItemSet.contains(itemNum)) {
+            if (batchItemSet.get(nextIdx).equals(itemNum)) {
                 columnItemList.add(new ColumnItem<>(column, itemNum));
+                nextIdx++;
             }
             itemNum++;
-        } while (byteBuffer.hasRemaining());
+        } while (byteBuffer.hasRemaining() && nextIdx < batchItemSet.size());
         return columnItemList;
     }
 

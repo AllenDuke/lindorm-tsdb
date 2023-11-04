@@ -78,7 +78,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     @Override
-    public List<ColumnItem<ColumnValue.DoubleFloatColumn>> range(List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
+    public List<ColumnItem<ColumnValue.DoubleFloatColumn>> range(List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException {
         super.flush();
 
         List<ColumnItem<ColumnValue.DoubleFloatColumn>> columnItemList = new ArrayList<>(timeItemList.size());
@@ -97,20 +97,18 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 throw new RuntimeException("获取buffer future failed.", e);
             }
             List<Double> doubles = unElf(byteBuffer);
-            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Set<Long> set = batchTimeItemSetMap.get(batchNum);
-            for (Double last : doubles) {
-                if (set.contains(itemNum)) {
-                    columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(last), itemNum));
-                }
-                itemNum++;
+            long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            for (Long itemNum : set) {
+                int idx = (int) (itemNum - begin);
+                columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(doubles.get(idx)), itemNum));
             }
         }
         return columnItemList;
     }
 
     @Override
-    public ColumnValue.DoubleFloatColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, Set<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public ColumnValue.DoubleFloatColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                                              CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.DoubleFloatColumn> notcheckList) throws IOException {
         double sum = 0.0;
         double max = -Double.MAX_VALUE;
@@ -140,16 +138,16 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                 throw new RuntimeException("获取buffer future failed.", e);
             }
             List<Double> doubles = unElf(byteBuffer);
-            long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Set<Long> set = batchTimeItemSetMap.get(batchNum);
-            for (Double last : doubles) {
-                if (set.contains(itemNum) && (columnFilter == null || compare(columnFilter, last))) {
-                    sum += last;
+            long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            for (Long itemNum : set) {
+                int idx = (int) (itemNum - begin);
+                double cur = doubles.get(idx);
+                if (columnFilter == null || compare(columnFilter, cur)) {
+                    sum += cur;
                     validCount++;
-                    max = Math.max(last, max);
-
+                    max = Math.max(cur, max);
                 }
-                itemNum++;
             }
         }
 

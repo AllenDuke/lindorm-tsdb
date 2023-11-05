@@ -172,6 +172,80 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
+    public List<ColumnValue> aggDownSample(List<Map<Long, List<Long>>> batchTimeItemSetMapList, Aggregator aggregator, CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.IntegerColumn> notcheckList) throws IOException {
+        List<ColumnValue> columnValueList = new ArrayList<>(batchTimeItemSetMapList.size());
+
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
+        Set<Long> needLoadBatchNumSet = new HashSet<>();
+        for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {
+            Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+            needLoadBatchNumSet.addAll(batchNumList);
+        }
+        for (Long batchNum : needLoadBatchNumSet) {
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+
+        Map<Long, List<Integer>> decodedMap = new HashMap<>();
+        for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {
+            long sum = 0;
+            int validCount = 0;
+            int max = Integer.MIN_VALUE;
+
+            Set<Long> batchNumList = batchTimeItemSetMap.keySet();
+            for (Long batchNum : batchNumList) {
+                List<Integer> ints = decodedMap.get(batchNum);
+                if (ints == null) {
+                    ByteBuffer byteBuffer = null;
+                    try {
+                        byteBuffer = futureMap.get(batchNum).get();
+                    } catch (Exception e) {
+                        throw new RuntimeException("获取buffer future failed.", e);
+                    }
+
+                    byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+                    ints = this.rzInt(byteBuffer);
+                    decodedMap.put(batchNum, ints);
+                }
+                long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+                List<Long> set = batchTimeItemSetMap.get(batchNum);
+                for (Integer cur : ints) {
+                    if (set.contains(itemNum++) && compare(columnFilter, cur)) {
+                        sum += cur;
+                        validCount++;
+                        max = Math.max(max, cur);
+                    }
+                }
+            }
+
+            for (ColumnValue.IntegerColumn columnValue : notcheckList) {
+                // todo split
+                if (columnFilter == null || compare(columnFilter, columnValue.getIntegerValue())) {
+                    sum += columnValue.getIntegerValue();
+                    validCount++;
+                    max = Math.max(max, columnValue.getIntegerValue());
+                }
+            }
+
+            if (Aggregator.AVG.equals(aggregator)) {
+                if (validCount == 0) {
+                    columnValueList.add(new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY));
+                } else {
+                    columnValueList.add(new ColumnValue.DoubleFloatColumn((double) sum / validCount));
+                }
+            }
+            if (Aggregator.MAX.equals(aggregator)) {
+                if (validCount == 0) {
+                    columnValueList.add(new ColumnValue.IntegerColumn(Integer.MIN_VALUE));
+                } else {
+                    columnValueList.add(new ColumnValue.IntegerColumn(max));
+                }
+            }
+        }
+        return columnValueList;
+    }
+
+    @Override
     public void flush() throws IOException {
         if (!isDirty) {
             return;

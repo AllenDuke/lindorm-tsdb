@@ -12,7 +12,6 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 public class LsmStorage {
 
@@ -258,6 +257,57 @@ public class LsmStorage {
         }
 
         loadedAllColumnIndexForInit = (int) batchNum;
+    }
+
+    public ArrayList<Row> aggDownSample(long lowerBound, long upperBound, long interval, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {
+        List<TimeItem> timeItemList = timeChannel.range(lowerBound, upperBound);
+        long l = lowerBound;
+        long r = Math.min(l + interval, upperBound);
+        List<Map<Long, List<Long>>> split = new ArrayList<>();
+        int i = 0;
+        while (l < upperBound) {
+            Map<Long, List<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
+            for (int j = i; j < timeItemList.size(); j++) {
+                TimeItem timeItem = timeItemList.get(j);
+                if (timeItem.getTime() >= r) {
+                    i = j;
+                    break;
+                }
+                if (timeItem.getTime() >= l) {
+                    List<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new ArrayList<>());
+                    timeItemSet.add(timeItem.getItemNum());
+                }
+            }
+
+            l = r;
+            r = Math.min(l + interval, upperBound);
+            split.add(batchTimeItemSetMap);
+        }
+
+        List<ColumnValue> notcheckList = new ArrayList<>();
+        if (rowBuffer != null && rowBuffer.position() > 0 && checkTime < r) {
+            // 在行存储的rowBuffer中
+            rowBuffer.flip();
+            List<Row> notCheckRowList = RowUtil.toRowList(tableSchema, rowBuffer);
+            for (Row row : notCheckRowList) {
+                if (row.getTimestamp() < l || row.getTimestamp() >= r) {
+                    continue;
+                }
+                notcheckList.add(row.getColumns().get(columnName));
+            }
+        }
+
+        ArrayList<Row> rowList = new ArrayList<>();
+
+        ColumnChannel columnChannel = columnChannelMap.get(columnName);
+        List<ColumnValue> list = columnChannel.aggDownSample(split, aggregator, columnFilter, columnIndexMap.get(columnName), notcheckList);
+        for (ColumnValue columnValue : list) {
+            Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
+            columnValueMap.put(columnName, columnValue);
+            rowList.add(new Row(vin, l, columnValueMap));
+        }
+
+        return rowList;
     }
 
     public Row agg(long l, long r, String columnName, Aggregator aggregator, CompareExpression columnFilter) throws IOException {

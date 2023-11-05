@@ -172,6 +172,73 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     @Override
+    public List<ColumnValue> aggDownSample(List<Map<Long, List<Long>>> batchTimeItemSetMapList, Aggregator aggregator, CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.DoubleFloatColumn> notcheckList) throws IOException {
+        List<ColumnValue> columnValueList = new ArrayList<>(batchTimeItemSetMapList.size());
+
+        Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
+        Set<Long> needLoadBatchNumSet = new HashSet<>();
+        for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {
+            Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+            needLoadBatchNumSet.addAll(batchNumList);
+        }
+        for (Long batchNum : needLoadBatchNumSet) {
+            ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
+        }
+
+        Map<Long, List<Double>> decodedMap = new HashMap<>();
+        for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {
+            double sum = 0.0;
+            double max = -Double.MAX_VALUE;
+            int validCount = 0;
+
+            Set<Long> batchNumList = batchTimeItemSetMap.keySet();
+            for (Long batchNum : batchNumList) {
+                List<Double> doubles = decodedMap.get(batchNum);
+                if (doubles == null) {
+                    ByteBuffer byteBuffer = null;
+                    try {
+                        byteBuffer = futureMap.get(batchNum).get();
+                    } catch (Exception e) {
+                        throw new RuntimeException("获取buffer future failed.", e);
+                    }
+                    doubles = unElf(byteBuffer);
+                    decodedMap.put(batchNum, doubles);
+                }
+                long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+                List<Long> set = batchTimeItemSetMap.get(batchNum);
+                for (Double cur : doubles) {
+                    if (set.contains(itemNum++) && compare(columnFilter, cur)) {
+                        sum += cur;
+                        validCount++;
+                        max = Math.max(cur, max);
+                    }
+                }
+            }
+
+            for (ColumnValue.DoubleFloatColumn columnValue : notcheckList) {
+                if (columnFilter == null || compare(columnFilter, columnValue.getDoubleFloatValue())) {
+                    sum += columnValue.getDoubleFloatValue();
+                    validCount++;
+                    max = Math.max(max, columnValue.getDoubleFloatValue());
+                }
+            }
+
+            if (validCount == 0) {
+                columnValueList.add(new ColumnValue.DoubleFloatColumn(Double.NEGATIVE_INFINITY));
+                continue;
+            }
+            if (Aggregator.AVG.equals(aggregator)) {
+                columnValueList.add(new ColumnValue.DoubleFloatColumn(sum / validCount));
+            }
+            if (Aggregator.MAX.equals(aggregator)) {
+                columnValueList.add(new ColumnValue.DoubleFloatColumn(max));
+            }
+        }
+        return columnValueList;
+    }
+
+    @Override
     public void flush() throws IOException {
         if (!isDirty) {
             return;

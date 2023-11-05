@@ -71,6 +71,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                                     CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<C> notcheckList) throws IOException;
 
+    public abstract List<ColumnValue> aggDownSample(List<Map<Long, List<Long>>> batchTimeItemSetMapList, Aggregator aggregator,
+                                                    CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<C> notcheckList) throws IOException;
+
+
     public void shutdown() throws IOException {
         flush();
         columnOutput.close();

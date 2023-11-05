@@ -315,19 +315,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(vin, key -> new ReentrantReadWriteLock());
             lock.writeLock().lock();
 
-            ArrayList<Row> rows = new ArrayList<>();
-
             LsmStorage lsmStorage = LSM_STORAGES.computeIfAbsent(vin, v -> new LsmStorage(dataPath, vin, tableSchema));
-            long l = downsampleReq.getTimeLowerBound();
-            long r = Math.min(l + downsampleReq.getInterval(), downsampleReq.getTimeUpperBound());
-            while (l < downsampleReq.getTimeUpperBound()) {
-                Row row = lsmStorage.agg(l, r, downsampleReq.getColumnName(), downsampleReq.getAggregator(), downsampleReq.getColumnFilter());
-                if (row != null) {
-                    rows.add(row);
-                }
-                l = r;
-                r = Math.min(l + downsampleReq.getInterval(), downsampleReq.getTimeUpperBound());
-            }
+            ArrayList<Row> rows = lsmStorage.aggDownSample(downsampleReq.getTimeLowerBound(), downsampleReq.getTimeUpperBound(), downsampleReq.getInterval(), downsampleReq.getColumnName(), downsampleReq.getAggregator(), downsampleReq.getColumnFilter());
             lock.writeLock().unlock();
             return rows;
         } catch (Throwable throwable) {

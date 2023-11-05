@@ -174,8 +174,8 @@ public class TSDBEngineImpl extends TSDBEngine {
             LSM_STORAGES.clear();
             VIN_LOCKS.clear();
 
-            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get() / 1000 + "KB");
-            System.out.println("shutdown column索引总大小：" + columnIndexFileSize.get() / 1000 + "KB");
+            System.out.println("shutdown 主键索引总大小：" + timeIndexFileSize.get());
+            System.out.println("shutdown column索引总大小：" + columnIndexFileSize.get());
 
             IO_EXECUTOR.shutdown();
 

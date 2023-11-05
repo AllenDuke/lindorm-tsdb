@@ -103,30 +103,30 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected Future<ByteBuffer> read(long batchNum, long pos, int size) throws IOException {
-//        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
-        return IO_EXECUTOR.submit(() -> {
-            long k = byteBufferMapK(pos);
-            ByteBuffer byteBuffer = BYTE_BUFFER_MAP.get(k);
-            if (byteBuffer != null) {
-                byteBuffer.clear();
-            } else {
-                byteBuffer = columnOutput.read(pos, size);
-                BYTE_BUFFER_MAP.put(k, byteBuffer);
-                AVAILABLE.addAndGet(-byteBuffer.capacity());
-                synchronized (BYTE_BUFFER_MAP) {
-                    // 避免并发修改
-                    Iterator<Map.Entry<Long, ByteBuffer>> entryIterator = BYTE_BUFFER_MAP.entrySet().iterator();
-                    while (entryIterator.hasNext()) {
-                        if (AVAILABLE.get() > 0) {
-                            break;
-                        }
-                        ByteBuffer remove = entryIterator.next().getValue();
-                        AVAILABLE.addAndGet(remove.capacity());
-                        entryIterator.remove();
-                    }
-                }
-            }
-            return byteBuffer;
-        });
+        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
+//        return IO_EXECUTOR.submit(() -> {
+//            long k = byteBufferMapK(pos);
+//            ByteBuffer byteBuffer = BYTE_BUFFER_MAP.get(k);
+//            if (byteBuffer != null) {
+//                byteBuffer.clear();
+//            } else {
+//                byteBuffer = columnOutput.read(pos, size);
+//                BYTE_BUFFER_MAP.put(k, byteBuffer);
+//                AVAILABLE.addAndGet(-byteBuffer.capacity());
+//                synchronized (BYTE_BUFFER_MAP) {
+//                    // 避免并发修改
+//                    Iterator<Map.Entry<Long, ByteBuffer>> entryIterator = BYTE_BUFFER_MAP.entrySet().iterator();
+//                    while (entryIterator.hasNext()) {
+//                        if (AVAILABLE.get() > 0) {
+//                            break;
+//                        }
+//                        ByteBuffer remove = entryIterator.next().getValue();
+//                        AVAILABLE.addAndGet(remove.capacity());
+//                        entryIterator.remove();
+//                    }
+//                }
+//            }
+//            return byteBuffer;
+//        });
     }
 }

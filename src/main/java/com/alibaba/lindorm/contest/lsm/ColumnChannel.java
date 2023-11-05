@@ -17,7 +17,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
     public static AtomicLong AGG_HIT_IDX_CNT = new AtomicLong(0);
     public static AtomicLong AGG_CNT = new AtomicLong(0);
 
-    public static AtomicLong DOWN_SAMPLE_CNT = new AtomicLong(0);
+    public static AtomicLong AGG_LOG_CNT = new AtomicLong(0);
 
     /**
      * 所有vin共享一个大缓存池。
@@ -68,7 +68,7 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     public abstract List<ColumnItem<C>> range(List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Map<Long, ColumnIndexItem> columnIndexItemMap) throws IOException;
 
-    public abstract ColumnValue agg(List<Long> compleateBatchNumList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public abstract ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                                     CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<C> notcheckList) throws IOException;
 
     public void shutdown() throws IOException {

@@ -46,8 +46,6 @@ public class TSDBEngineImpl extends TSDBEngine {
                 try {
                     Thread.sleep(1000 * 60 * 5);
                     System.out.println("lastBuffer命中次数：" + DataChannel.LAST_CNT.get() + "，半包次数：" + DataChannel.LAST_HALF_CNT.get() + "，半包率：" + (double) DataChannel.LAST_HALF_CNT.get() / DataChannel.LAST_CNT.get());
-                    System.out.println("AGG_CNT：" + ColumnChannel.AGG_CNT.get() + ", AGG_HIT_IDX_CNT：" + ColumnChannel.AGG_HIT_IDX_CNT.get());
-                    System.out.println("DOWN_SAMPLE_CNT：" + ColumnChannel.DOWN_SAMPLE_CNT.get());
                 } catch (Throwable throwable) {
                     throwable.printStackTrace(System.out);
                 }
@@ -203,8 +201,6 @@ public class TSDBEngineImpl extends TSDBEngine {
             System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());
             System.out.println("lastBuffer命中次数：" + DataChannel.LAST_CNT.get() + "，半包次数：" + DataChannel.LAST_HALF_CNT.get() + "，半包率：" + (double) DataChannel.LAST_HALF_CNT.get() / DataChannel.LAST_CNT.get());
             System.out.println("double类型最大精度：" + DataChannel.MAX_SCALE_MAP.values().stream().max(Integer::compareTo).orElse(0));
-            System.out.println("AGG_CNT：" + ColumnChannel.AGG_CNT.get() + ", AGG_HIT_IDX_CNT：" + ColumnChannel.AGG_HIT_IDX_CNT.get());
-            System.out.println("DOWN_SAMPLE_CNT：" + ColumnChannel.DOWN_SAMPLE_CNT.get());
             System.out.println("shutdown done");
         } catch (Throwable throwable) {
             System.out.println("shutdown failed.");

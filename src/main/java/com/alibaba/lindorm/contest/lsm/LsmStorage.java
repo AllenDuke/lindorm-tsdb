@@ -283,11 +283,11 @@ public class LsmStorage {
         }
 
         List<TimeItem> timeRange = timeChannel.agg(l, r);
-        List<Long> batch = new ArrayList<>();
+        List<TimeItem> batch = new ArrayList<>();
         Map<Long, List<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
         for (TimeItem timeItem : timeRange) {
             if (timeItem.getTime() == 0) {
-                batch.add(timeItem.getBatchNum());
+                batch.add(timeItem);
             } else {
                 List<Long> timeItemSet = batchTimeItemSetMap.computeIfAbsent(timeItem.getBatchNum(), v -> new ArrayList<>());
                 timeItemSet.add(timeItem.getItemNum());

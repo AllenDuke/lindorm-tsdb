@@ -108,29 +108,23 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     @Override
-    public ColumnValue.DoubleFloatColumn agg(List<Long> compleateBatchNumList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public ColumnValue.DoubleFloatColumn agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                                              CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.DoubleFloatColumn> notcheckList) throws IOException {
         double sum = 0.0;
         double max = -Double.MAX_VALUE;
         int validCount = 0;
 
-        if (columnFilter == null && !compleateBatchNumList.isEmpty()) {
-            for (Long batchNum : compleateBatchNumList) {
+        if (columnFilter == null && !batchItemList.isEmpty()) {
+            for (TimeItem item : batchItemList) {
+                long batchNum = item.getBatchNum();
                 DoubleIndexItem columnIndexItem = (DoubleIndexItem) columnIndexItemMap.get(batchNum);
                 validCount += columnIndexItem.getBatchItemCount();
                 sum += columnIndexItem.getBatchSum();
                 max = Math.max(max, columnIndexItem.getBatchMax());
             }
-            AGG_HIT_IDX_CNT.getAndAdd(compleateBatchNumList.size());
         }
 
-        Collection<Long> batchNumList = new LinkedHashSet<>(batchTimeItemSetMap.keySet());
-        if (columnFilter != null) {
-            batchNumList.addAll(compleateBatchNumList);
-            DOWN_SAMPLE_CNT.addAndGet(batchNumList.size());
-        } else {
-            AGG_CNT.getAndAdd(batchNumList.size());
-        }
+        Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
         Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
@@ -146,7 +140,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Double> doubles = unElf(byteBuffer, begin, set);
-            for (Double cur : doubles) {
+            int idx = 0;
+            for (Long itemNum : set) {
+                double cur = doubles.get(idx++);
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;

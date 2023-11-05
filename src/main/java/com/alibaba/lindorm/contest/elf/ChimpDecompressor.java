@@ -39,14 +39,15 @@ public class ChimpDecompressor implements IDecompressor {
 
     @Override
     public List<Double> decompress(long batchNumBegin, List<Long> batchNumList) {
+        // batchNumList为null解压全部
         List<Double> list = new ArrayList<>();
-        if (batchNumList.isEmpty()) {
+        if (batchNumList != null && batchNumList.isEmpty()) {
             return list;
         }
         int idx = 0;
         Double value = readValue();
-        while (value != null && idx < batchNumList.size()) {
-            if (batchNumList.get(idx).equals(batchNumBegin++)) {
+        while (value != null && (batchNumList == null || idx < batchNumList.size())) {
+            if (batchNumList == null || batchNumList.get(idx).equals(batchNumBegin++)) {
                 list.add(value);
                 idx++;
             }

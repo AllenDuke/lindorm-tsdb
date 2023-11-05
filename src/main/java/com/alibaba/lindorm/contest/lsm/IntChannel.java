@@ -100,25 +100,30 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     @Override
-    public ColumnValue agg(List<TimeItem> batchItemList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
+    public ColumnValue agg(List<Long> compleateBatchNumList, List<TimeItem> timeItemList, Map<Long, List<Long>> batchTimeItemSetMap, Aggregator aggregator,
                            CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.IntegerColumn> notcheckList) throws IOException {
         long sum = 0;
         int validCount = 0;
         int max = Integer.MIN_VALUE;
 
-        if (columnFilter == null && !batchItemList.isEmpty()) {
-            for (TimeItem item : batchItemList) {
-                long batchNum = item.getBatchNum();
+        if (columnFilter == null && !compleateBatchNumList.isEmpty()) {
+            for (Long batchNum : compleateBatchNumList) {
                 IntIndexItem columnIndexItem = (IntIndexItem) columnIndexItemMap.get(batchNum);
                 validCount += columnIndexItem.getBatchItemCount();
                 sum += columnIndexItem.getBatchSum();
                 max = Math.max(max, columnIndexItem.getBatchMax());
 
             }
-//            AGG_HIT_IDX_CNT.getAndAdd(validCount);
+            AGG_HIT_IDX_CNT.getAndAdd(compleateBatchNumList.size());
         }
 
-        Collection<Long> batchNumList = batchTimeItemSetMap.keySet();
+        Collection<Long> batchNumList = new LinkedHashSet<>(batchTimeItemSetMap.keySet());
+        if (columnFilter != null) {
+            batchNumList.addAll(compleateBatchNumList);
+            DOWN_SAMPLE_CNT.addAndGet(batchNumList.size());
+        } else {
+            AGG_CNT.getAndAdd(batchNumList.size());
+        }
         Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         for (Long batchNum : batchNumList) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
@@ -137,9 +142,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Integer> ints = this.rzInt(byteBuffer, begin, set);
-            int idx = 0;
-            for (Long itemNum : set) {
-                int cur = ints.get(idx++);
+            for (Integer cur : ints) {
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;
@@ -198,23 +201,23 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
     public List<Integer> rzInt(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
-        if (batchNumList.isEmpty()) {
+        if (batchNumList != null && batchNumList.isEmpty()) {
             return ints;
         }
         int idx = 0;
         int lastPre = buffer.getInt();
         int last = buffer.getInt();
-        if (batchNumList.get(idx).equals(batchNumBegin++)) {
+        if (batchNumList == null || batchNumList.get(idx).equals(batchNumBegin++)) {
             ints.add(lastPre);
             idx++;
         }
-        if (idx < batchNumList.size() && batchNumList.get(idx).equals(batchNumBegin++)) {
+        if (batchNumList == null || idx < batchNumList.size() && batchNumList.get(idx).equals(batchNumBegin++)) {
             ints.add(last);
             idx++;
         }
-        while (buffer.hasRemaining() && idx < batchNumList.size()) {
+        while (buffer.hasRemaining() && (batchNumList == null || idx < batchNumList.size())) {
             int cur = last - lastPre + last + zigZagDecode(readVInt(buffer));
-            if (batchNumList.get(idx).equals(batchNumBegin++)) {
+            if (batchNumList == null || batchNumList.get(idx).equals(batchNumBegin++)) {
                 ints.add(cur);
                 idx++;
             }

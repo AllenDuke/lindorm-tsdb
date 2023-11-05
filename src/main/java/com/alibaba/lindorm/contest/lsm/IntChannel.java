@@ -87,12 +87,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
-            List<Integer> ints = this.rzInt(byteBuffer);
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Integer> ints = this.rzInt(byteBuffer, begin, set);
+            int idx = 0;
             for (Long itemNum : set) {
-                int idx = (int) (itemNum - begin);
-                columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx)), itemNum));
+                columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx++)), itemNum));
             }
         }
 
@@ -134,14 +134,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
 
-            List<Integer> ints = this.rzInt(byteBuffer);
-            // 减少乘法计算
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            // 减少hash计算
-            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Integer> ints = this.rzInt(byteBuffer, begin, set);
+            int idx = 0;
             for (Long itemNum : set) {
-                int idx = (int) (itemNum - begin);
-                int cur = ints.get(idx);
+                int cur = ints.get(idx++);
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;
@@ -192,6 +190,34 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         while (buffer.hasRemaining()) {
             int cur = last - lastPre + last + zigZagDecode(readVInt(buffer));
             ints.add(cur);
+            lastPre = last;
+            last = cur;
+        }
+        return ints;
+    }
+
+    public List<Integer> rzInt(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
+        List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
+        if (batchNumList.isEmpty()) {
+            return ints;
+        }
+        int idx = 0;
+        int lastPre = buffer.getInt();
+        int last = buffer.getInt();
+        if (batchNumList.get(idx).equals(batchNumBegin++)) {
+            ints.add(lastPre);
+            idx++;
+        }
+        if (idx < batchNumList.size() && batchNumList.get(idx).equals(batchNumBegin++)) {
+            ints.add(last);
+            idx++;
+        }
+        while (buffer.hasRemaining() && idx < batchNumList.size()) {
+            int cur = last - lastPre + last + zigZagDecode(readVInt(buffer));
+            if (batchNumList.get(idx).equals(batchNumBegin++)) {
+                ints.add(cur);
+                idx++;
+            }
             lastPre = last;
             last = cur;
         }

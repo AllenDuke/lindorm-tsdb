@@ -13,4 +13,9 @@ public class GorillaDecompressorOS implements IDecompressor{
     @Override public List<Double> decompress() {
         return gorillaDecompressor.getValues();
     }
+
+    @Override
+    public List<Double> decompress(long batchNumBegin, List<Long> batchNumList) {
+        return null;
+    }
 }

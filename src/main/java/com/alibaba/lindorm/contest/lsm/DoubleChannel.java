@@ -96,12 +96,12 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             } catch (Exception e) {
                 throw new RuntimeException("获取buffer future failed.", e);
             }
-            List<Double> doubles = unElf(byteBuffer);
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Double> doubles = unElf(byteBuffer, begin, set);
+            int idx = 0;
             for (Long itemNum : set) {
-                int idx = (int) (itemNum - begin);
-                columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(doubles.get(idx)), itemNum));
+                columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(doubles.get(idx++)), itemNum));
             }
         }
         return columnItemList;
@@ -137,12 +137,12 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             } catch (Exception e) {
                 throw new RuntimeException("获取buffer future failed.", e);
             }
-            List<Double> doubles = unElf(byteBuffer);
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-            Collection<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Long> set = batchTimeItemSetMap.get(batchNum);
+            List<Double> doubles = unElf(byteBuffer, begin, set);
+            int idx = 0;
             for (Long itemNum : set) {
-                int idx = (int) (itemNum - begin);
-                double cur = doubles.get(idx);
+                double cur = doubles.get(idx++);
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;
@@ -197,6 +197,13 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     public List<Double> unElf(ByteBuffer buffer) throws IOException {
+        byte[] array1 = ByteBufferUtil.toBytes(buffer);
+        IDecompressor decompressor = new ChimpDecompressor(array1);
+        List<Double> values = decompressor.decompress();
+        return values;
+    }
+
+    public List<Double> unElf(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
         IDecompressor decompressor = new ChimpDecompressor(array1);
         List<Double> values = decompressor.decompress();

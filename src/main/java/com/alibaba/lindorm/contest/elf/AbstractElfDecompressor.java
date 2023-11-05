@@ -23,6 +23,11 @@ public abstract class AbstractElfDecompressor implements IDecompressor {
         return values;
     }
 
+    @Override
+    public List<Double> decompress(long batchNumBegin, List<Long> batchNumList) {
+        return null;
+    }
+
     private Double nextValue() {
         int flag = readInt(1);
 

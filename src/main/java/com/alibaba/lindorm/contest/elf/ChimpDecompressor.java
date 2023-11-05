@@ -7,7 +7,6 @@ import java.util.List;
 
 /**
  * Decompresses a compressed stream created by the Compressor. Returns pairs of timestamp and floating point value.
- *
  */
 public class ChimpDecompressor implements IDecompressor {
 
@@ -38,6 +37,24 @@ public class ChimpDecompressor implements IDecompressor {
         return list;
     }
 
+    @Override
+    public List<Double> decompress(long batchNumBegin, List<Long> batchNumList) {
+        List<Double> list = new ArrayList<>();
+        if (batchNumList.isEmpty()) {
+            return list;
+        }
+        int idx = 0;
+        Double value = readValue();
+        while (value != null && idx < batchNumList.size()) {
+            if (batchNumList.get(idx).equals(batchNumBegin++)) {
+                list.add(value);
+                idx++;
+            }
+            value = readValue();
+        }
+        return list;
+    }
+
     public InputBitStream getInputStream() {
         return in;
     }
@@ -53,7 +70,7 @@ public class ChimpDecompressor implements IDecompressor {
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage());
         }
-        if(endOfStream) {
+        if (endOfStream) {
             return null;
         }
         return Double.longBitsToDouble(storedVal);
@@ -78,12 +95,12 @@ public class ChimpDecompressor implements IDecompressor {
         long value;
         // Read value
         int flag = in.readInt(2);
-        switch(flag) {
+        switch (flag) {
             case 3:
                 // New leading zeros
                 storedLeadingZeros = leadingRepresentation[in.readInt(3)];
                 significantBits = 64 - storedLeadingZeros;
-                if(significantBits == 0) {
+                if (significantBits == 0) {
                     significantBits = 64;
                 }
                 value = in.readLong(64 - storedLeadingZeros);
@@ -97,7 +114,7 @@ public class ChimpDecompressor implements IDecompressor {
                 break;
             case 2:
                 significantBits = 64 - storedLeadingZeros;
-                if(significantBits == 0) {
+                if (significantBits == 0) {
                     significantBits = 64;
                 }
                 value = in.readLong(64 - storedLeadingZeros);
@@ -112,7 +129,7 @@ public class ChimpDecompressor implements IDecompressor {
             case 1:
                 storedLeadingZeros = leadingRepresentation[in.readInt(3)];
                 significantBits = in.readInt(6);
-                if(significantBits == 0) {
+                if (significantBits == 0) {
                     significantBits = 64;
                 }
                 storedTrailingZeros = 64 - significantBits - storedLeadingZeros;

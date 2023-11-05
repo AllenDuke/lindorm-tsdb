@@ -162,9 +162,9 @@ public class TSDBEngineImpl extends TSDBEngine {
                 shutdownExecutor.execute(() -> {
                     ReentrantReadWriteLock lock = VIN_LOCKS.computeIfAbsent(lsmStorage.getVin(), key -> new ReentrantReadWriteLock());
                     lock.writeLock().lock();
+                    lsmStorage.shutdown();
                     timeIndexFileSize.getAndAdd(lsmStorage.getTimeIndexFileSize());
                     columnIndexFileSize.getAndAdd(lsmStorage.getColumnIndexFileSize());
-                    lsmStorage.shutdown();
                     lock.writeLock().unlock();
                     countDownLatch.countDown();
                 });

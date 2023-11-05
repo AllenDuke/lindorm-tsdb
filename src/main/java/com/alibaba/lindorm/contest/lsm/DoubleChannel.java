@@ -206,7 +206,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     public List<Double> unElf(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
         IDecompressor decompressor = new ChimpDecompressor(array1);
-        List<Double> values = decompressor.decompress();
+        List<Double> values = decompressor.decompress(batchNumBegin, batchNumList);
         return values;
     }
 

@@ -264,8 +264,10 @@ public class LsmStorage {
         long l = lowerBound;
         long r = Math.min(l + interval, upperBound);
         List<Map<Long, List<Long>>> split = new ArrayList<>();
+        List<Long> lList = new ArrayList<>();
         int i = 0;
         while (l < upperBound) {
+            lList.add(l);
             Map<Long, List<Long>> batchTimeItemSetMap = new LinkedHashMap<>();
             for (int j = i; j < timeItemList.size(); j++) {
                 TimeItem timeItem = timeItemList.get(j);
@@ -301,10 +303,11 @@ public class LsmStorage {
 
         ColumnChannel columnChannel = columnChannelMap.get(columnName);
         List<ColumnValue> list = columnChannel.aggDownSample(split, aggregator, columnFilter, columnIndexMap.get(columnName), notcheckList);
+        i = 0;
         for (ColumnValue columnValue : list) {
             Map<String, ColumnValue> columnValueMap = new HashMap<>(1);
             columnValueMap.put(columnName, columnValue);
-            rowList.add(new Row(vin, l, columnValueMap));
+            rowList.add(new Row(vin, lList.get(i++), columnValueMap));
         }
 
         return rowList;

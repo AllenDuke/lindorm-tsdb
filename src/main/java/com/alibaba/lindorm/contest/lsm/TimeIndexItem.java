@@ -1,5 +1,7 @@
 package com.alibaba.lindorm.contest.lsm;
 
+import java.nio.ByteBuffer;
+
 public class TimeIndexItem {
 
     public static int SIZE = 8 + 8 + 8 + 4;
@@ -33,5 +35,12 @@ public class TimeIndexItem {
 
     public int getSize() {
         return size;
+    }
+
+    public void write(ByteBuffer byteBuffer) {
+        byteBuffer.putLong(getMinTime());
+        byteBuffer.putLong(getMaxTime());
+        byteBuffer.putLong(getPos());
+        byteBuffer.putInt(getSize());
     }
 }

@@ -65,9 +65,9 @@ public class LsmStorage {
 
     private final TimeChannel timeChannel;
 
-    private final DataChannel columnIndexChannel;
+    private final DataChannel indexChannel;
 
-    private int columnIndexItemSize;
+    private int indexItemSize;
 
     private final FileChannel metaChannel;
 
@@ -78,6 +78,7 @@ public class LsmStorage {
      */
     private Row latestRow;
 
+    private final List<TimeIndexItem> timeIndexItemList = new ArrayList<>();
     private Map<String, Map<Long, ColumnIndexItem>> columnIndexMap = new HashMap<>();
 
     private int loadedAllColumnIndexForInit = -1;
@@ -92,6 +93,8 @@ public class LsmStorage {
 
     private int batchItemCount;
 
+    private int batchCount;
+
     public LsmStorage(File dbDir, Vin vin, TableSchema tableSchema) {
 //        initColumnExecutor(tableSchema.getColumnList().size());
 //        initColumnFlusher(tableSchema.getColumnList().size());
@@ -105,8 +108,6 @@ public class LsmStorage {
         this.vin = vin;
         this.tableSchema = tableSchema;
         try {
-            this.timeChannel = new TimeChannel(dir);
-
             File vinFile = new File(dir, vinStr + ".meta");
             metaChannel = new RandomAccessFile(vinFile, "rw").getChannel();
             if (metaChannel.size() == 0) {
@@ -115,38 +116,39 @@ public class LsmStorage {
                 latestTime = metaChannel.map(FileChannel.MapMode.READ_ONLY, 0, 8).getLong();
             }
 
-
-            File columnFile = new File(dir.getAbsolutePath(), "column.data");
-            if (!columnFile.exists()) {
-                columnFile.createNewFile();
+            File dataFile = new File(dir.getAbsolutePath(), "data");
+            if (!dataFile.exists()) {
+                dataFile.createNewFile();
             }
-            DataChannel columnOutput = new DataChannel(columnFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
+
+            DataChannel dataChannel = new DataChannel(dataFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
+            this.timeChannel = new TimeChannel(dataChannel, timeIndexItemList);
+            indexItemSize += TimeIndexItem.SIZE;
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {
-                    columnChannelMap.put(column.columnName, new IntChannel(vinStr.hashCode(), column, columnFile, columnOutput));
-                    columnIndexItemSize += IntChannel.IDX_SIZE;
+                    columnChannelMap.put(column.columnName, new IntChannel(vinStr.hashCode(), column, dataFile, dataChannel));
+                    indexItemSize += IntChannel.IDX_SIZE;
                     column.indexSize = IntChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_DOUBLE_FLOAT)) {
-                    columnChannelMap.put(column.columnName, new DoubleChannel(vinStr.hashCode(), column, columnFile, columnOutput));
-                    columnIndexItemSize += DoubleChannel.IDX_SIZE;
+                    columnChannelMap.put(column.columnName, new DoubleChannel(vinStr.hashCode(), column, dataFile, dataChannel));
+                    indexItemSize += DoubleChannel.IDX_SIZE;
                     column.indexSize = DoubleChannel.IDX_SIZE;
                 } else if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_STRING)) {
-                    columnChannelMap.put(column.columnName, new StringChannel(vinStr.hashCode(), column, columnFile, columnOutput));
-                    columnIndexItemSize += StringChannel.IDX_SIZE;
+                    columnChannelMap.put(column.columnName, new StringChannel(vinStr.hashCode(), column, dataFile, dataChannel));
+                    indexItemSize += StringChannel.IDX_SIZE;
                     column.indexSize = StringChannel.IDX_SIZE;
                 } else {
                     throw new IllegalStateException("无效列类型");
                 }
             }
 
-            File columnIndexFile = new File(dir, "column.idx");
-            if (!columnIndexFile.exists()) {
-                columnIndexFile.createNewFile();
+            File indexFile = new File(dir, "idx");
+            if (!indexFile.exists()) {
+                indexFile.createNewFile();
             }
-            columnIndexChannel = new DataChannel(columnIndexFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
-
-            loadAllColumnIndexForInit();
+            indexChannel = new DataChannel(indexFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
+            loadAllIndexForInit();
 
             if (latestTime != 0) {
                 getLatestRow();
@@ -157,26 +159,9 @@ public class LsmStorage {
         }
     }
 
-    private Row deepClone(Row row) {
-        Map<String, ColumnValue> columns = row.getColumns();
-        Map<String, ColumnValue> columnsClone = new HashMap<>(columns.size());
-        columns.forEach((k, v) -> {
-            if (v.getColumnType() == ColumnValue.ColumnType.COLUMN_TYPE_STRING) {
-                ByteBuffer stringValue = v.getStringValue();
-
-                ByteBuffer allocate = ByteBuffer.allocate(stringValue.limit());
-                allocate.put(stringValue);
-                allocate.flip();
-
-                // 只有这个是可能会变的 其他都是final的
-                v = new ColumnValue.StringColumn(allocate);
-            }
-            columnsClone.put(k, v);
-        });
-        return new Row(row.getVin(), row.getTimestamp(), columnsClone);
-    }
-
     private void insert() throws IOException {
+        batchCount++;
+
         rowBuffer.flip();
         List<Row> rowList = RowUtil.toRowList(tableSchema, rowBuffer);
         rowBuffer.clear();
@@ -203,7 +188,7 @@ public class LsmStorage {
             // help gc
             List<ColumnValue> columnValues = columnValuesMap.remove(column.columnName);
             try {
-                columnChannelMap.get(column.columnName).append(columnValues, columnIndexChannel, columnIndexMap.get(column.columnName));
+                columnChannelMap.get(column.columnName).append(columnValues, indexChannel, columnIndexMap.get(column.columnName));
             } catch (IOException e) {
                 e.printStackTrace();
                 throw new IllegalStateException(column.columnType + "列插入失败");
@@ -233,20 +218,22 @@ public class LsmStorage {
         }
     }
 
-    private void loadAllColumnIndexForInit() throws IOException {
+    private void loadAllIndexForInit() throws IOException {
         if (loadedAllColumnIndexForInit != -1) {
             return;
         }
         for (TableSchema.Column column : tableSchema.getColumnList()) {
             columnIndexMap.put(column.columnName, new HashMap<>());
         }
-        if (columnIndexChannel.channelSize() == 0) {
+        if (latestTime == 0) {
             return;
         }
-        ByteBuffer byteBuffer = columnIndexChannel.read(0L, (int) columnIndexChannel.channelSize());
+        ByteBuffer byteBuffer = indexChannel.read(0L, (int) indexChannel.channelSize());
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         long batchNum = 0;
         while (byteBuffer.hasRemaining()) {
+            TimeIndexItem timeIndexItem = timeChannel.readIndexItem(byteBuffer);
+            timeIndexItemList.add(timeIndexItem);
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
                 ColumnChannel columnChannel = columnChannelMap.get(column.columnName);
@@ -422,17 +409,18 @@ public class LsmStorage {
 
     public void flush() throws IOException {
         timeChannel.flush();
-        columnIndexChannel.flush();
+        indexChannel.flush();
 
         for (ColumnChannel columnChannel : columnChannelMap.values()) {
             columnChannel.flush();
         }
     }
 
-    private void columnIndexOutput() throws IOException {
-        int batchIndexCount = timeChannel.batchIndexCount();
-        ByteBuffer allocate = ByteBuffer.allocate(batchIndexCount * columnIndexItemSize);
-        for (int i = 0; i < batchIndexCount; i++) {
+    private void indexOutput() throws IOException {
+        ByteBuffer allocate = ByteBuffer.allocate(batchCount * indexItemSize);
+        for (int i = 0; i < batchCount; i++) {
+            TimeIndexItem timeIndexItem = timeIndexItemList.get(i);
+            timeIndexItem.write(allocate);
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 Map<Long, ColumnIndexItem> columnIndexItemMap = columnIndexMap.get(column.columnName);
                 ColumnIndexItem columnIndexItem = columnIndexItemMap.get((long) i);
@@ -441,9 +429,9 @@ public class LsmStorage {
         }
 
         byte[] bytes = ByteBufferUtil.zstdEncode(allocate.flip());
-        columnIndexChannel.writeBytes(bytes);
-        columnIndexChannel.flush();
-        columnIndexChannel.close();
+        indexChannel.writeBytes(bytes);
+        indexChannel.flush();
+        indexChannel.close();
     }
 
     public void shutdown() {
@@ -491,7 +479,9 @@ public class LsmStorage {
 //                }
 //            }
 
-            columnIndexOutput();
+            if (batchCount > 0) {
+                indexOutput();
+            }
 
             timeChannel.shutdown();
             for (ColumnChannel columnChannel : columnChannelMap.values()) {
@@ -530,7 +520,7 @@ public class LsmStorage {
 
     public long getColumnIndexFileSize() {
         try {
-            return columnIndexChannel.channelSize();
+            return indexChannel.channelSize();
         } catch (IOException e) {
             System.out.println("getColumnIndexFileSize failed.");
             return 0;

@@ -175,6 +175,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     public List<ColumnValue> aggDownSample(List<Map<Long, List<Long>>> batchTimeItemSetMapList, Aggregator aggregator, CompareExpression columnFilter, Map<Long, ColumnIndexItem> columnIndexItemMap, List<ColumnValue.IntegerColumn> notcheckList) throws IOException {
         List<ColumnValue> columnValueList = new ArrayList<>(batchTimeItemSetMapList.size());
 
+        AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM.addAndGet(batchTimeItemSetMapList.size());
+
         Map<Long, Future<ByteBuffer>> futureMap = new HashMap<>();
         Set<Long> needLoadBatchNumSet = new HashSet<>();
         for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {
@@ -185,6 +187,8 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
             futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
         }
+
+        AGG_DOWN_SAMPLE_LOAD_SUM.addAndGet(needLoadBatchNumSet.size());
 
         Map<Long, List<Integer>> decodedMap = new HashMap<>();
         for (Map<Long, List<Long>> batchTimeItemSetMap : batchTimeItemSetMapList) {

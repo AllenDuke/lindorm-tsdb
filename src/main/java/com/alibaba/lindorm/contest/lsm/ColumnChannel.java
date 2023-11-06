@@ -19,6 +19,10 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     public static AtomicLong AGG_LOG_CNT = new AtomicLong(0);
 
+    public static AtomicLong AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM = new AtomicLong(0);
+
+    public static AtomicLong AGG_DOWN_SAMPLE_LOAD_SUM = new AtomicLong(0);
+
     /**
      * 所有vin共享一个大缓存池。
      * BYTE_BUFFER_MAP，k高32位为vin.hashcode

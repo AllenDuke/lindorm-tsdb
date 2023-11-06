@@ -44,8 +44,9 @@ public class TSDBEngineImpl extends TSDBEngine {
         flusher = new Thread(() -> {
             while (connected) {
                 try {
-                    Thread.sleep(1000 * 60 * 5);
+                    Thread.sleep(1000 * 60 * 1);
                     System.out.println("lastBuffer命中次数：" + DataChannel.LAST_CNT.get() + "，半包次数：" + DataChannel.LAST_HALF_CNT.get() + "，半包率：" + (double) DataChannel.LAST_HALF_CNT.get() / DataChannel.LAST_CNT.get());
+                    System.out.println("AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM：" + ColumnChannel.AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM.get() + "，AGG_DOWN_SAMPLE_LOAD_SUM：" + ColumnChannel.AGG_DOWN_SAMPLE_LOAD_SUM.get());
                 } catch (Throwable throwable) {
                     throwable.printStackTrace(System.out);
                 }
@@ -200,6 +201,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             System.out.println("string列原大小：" + StringChannel.ORIG_SIZE.get() + "，实际大小：" + StringChannel.REAL_SIZE.get() + "，压缩率：" + (double) StringChannel.REAL_SIZE.get() / StringChannel.ORIG_SIZE.get());
             System.out.println("double列原大小：" + DoubleChannel.ORIG_SIZE.get() + "，实际大小：" + DoubleChannel.REAL_SIZE.get() + "，压缩率：" + (double) DoubleChannel.REAL_SIZE.get() / DoubleChannel.ORIG_SIZE.get());
             System.out.println("lastBuffer命中次数：" + DataChannel.LAST_CNT.get() + "，半包次数：" + DataChannel.LAST_HALF_CNT.get() + "，半包率：" + (double) DataChannel.LAST_HALF_CNT.get() / DataChannel.LAST_CNT.get());
+            System.out.println("AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM：" + ColumnChannel.AGG_DOWN_SAMPLE_WINDOW_BATCH_SUM.get() + "，AGG_DOWN_SAMPLE_LOAD_SUM：" + ColumnChannel.AGG_DOWN_SAMPLE_LOAD_SUM.get());
             System.out.println("double类型最大精度：" + DataChannel.MAX_SCALE_MAP.values().stream().max(Integer::compareTo).orElse(0));
             System.out.println("shutdown done");
         } catch (Throwable throwable) {

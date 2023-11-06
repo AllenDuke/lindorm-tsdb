@@ -274,6 +274,40 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         return ints;
     }
 
+    public List<Integer> rzIntDelta(ByteBuffer buffer) throws IOException {
+        List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
+        int last = buffer.getInt();
+        ints.add(last);
+        while (buffer.hasRemaining()) {
+            int cur = last + zigZagDecode(readVInt(buffer));
+            ints.add(cur);
+            last = cur;
+        }
+        return ints;
+    }
+
+    public List<Integer> rzIntDelta(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
+        List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
+        if (batchNumList.isEmpty()) {
+            return ints;
+        }
+        int idx = 0;
+        int last = buffer.getInt();
+        if (idx < batchNumList.size() && batchNumList.get(idx).equals(batchNumBegin++)) {
+            ints.add(last);
+            idx++;
+        }
+        while (buffer.hasRemaining() && idx < batchNumList.size()) {
+            int cur = last + zigZagDecode(readVInt(buffer));
+            if (batchNumList.get(idx).equals(batchNumBegin++)) {
+                ints.add(cur);
+                idx++;
+            }
+            last = cur;
+        }
+        return ints;
+    }
+
     public List<Integer> rzInt(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
         if (batchNumList.isEmpty()) {
@@ -343,6 +377,28 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             }
             buffer.put((byte) v);
             lastPre = last;
+            last = ints.get(i).getIntegerValue();
+        }
+        buffer.flip();
+        return buffer;
+    }
+
+    public ByteBuffer zIntDelta(List<ColumnValue.IntegerColumn> ints) {
+        ByteBuffer buffer = ByteBuffer.allocate(ints.size() * 5);
+        int last = ints.get(0).getIntegerValue();
+        batchSum += last;
+        batchMax = Math.max(batchMax, last);
+        buffer.putInt(last);
+        for (int i = 1; i < ints.size(); i++) {
+            int v = ints.get(i).getIntegerValue();
+            batchSum += v;
+            batchMax = Math.max(batchMax, v);
+            v = this.zigZagEncode(ints.get(i).getIntegerValue() - last);
+            while ((v & ~0x7F) != 0) {
+                buffer.put((byte) ((v & 0x7F) | 0x80));
+                v >>>= 7;
+            }
+            buffer.put((byte) v);
             last = ints.get(i).getIntegerValue();
         }
         buffer.flip();

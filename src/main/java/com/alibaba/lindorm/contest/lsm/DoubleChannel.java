@@ -249,7 +249,7 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
     }
 
     public byte[] elf(List<ColumnValue.DoubleFloatColumn> doubleFloatColumns) throws IOException {
-        ICompressor compressor = new ChimpCompressor(DataChannel.BUFFER_SIZE * 4);
+        ICompressor compressor = new ChimpNCompressor(DataChannel.BUFFER_SIZE * 4, 128);
         for (ColumnValue.DoubleFloatColumn doubleFloatColumn : doubleFloatColumns) {
             double v = doubleFloatColumn.getDoubleFloatValue();
             compressor.addValue(v);
@@ -265,14 +265,14 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
 
     public List<Double> unElf(ByteBuffer buffer) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
-        IDecompressor decompressor = new ChimpDecompressor(array1);
+        IDecompressor decompressor = new ChimpNDecompressor(array1, 128);
         List<Double> values = decompressor.decompress();
         return values;
     }
 
     public List<Double> unElf(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         byte[] array1 = ByteBufferUtil.toBytes(buffer);
-        IDecompressor decompressor = new ChimpDecompressor(array1);
+        IDecompressor decompressor = new ChimpNDecompressor(array1, 128);
         List<Double> values = decompressor.decompress(batchNumBegin, batchNumList);
         return values;
     }

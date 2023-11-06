@@ -54,6 +54,8 @@ public class TimeChannel {
     private int batchSize;
 
     private Map<Integer, ByteBuffer> byteBufferMap = new HashMap<>();
+    private Map<Integer, List<Integer>> intsMap = new HashMap<>();
+    private Map<Integer, Long> batchFirstMap = new HashMap<>();
 
     public TimeChannel(File vinDir) throws IOException {
         timeFile = new File(vinDir.getAbsolutePath(), "time.data");
@@ -253,23 +255,32 @@ public class TimeChannel {
 //        int read = timeInput.read(byteBuffer.array());
 //        byteBuffer.limit(read);
 
-        ByteBuffer byteBuffer = byteBufferMap.get(batchNum);
-        if (byteBuffer != null) {
-            byteBuffer.clear();
+        List<Integer> ints = intsMap.get(batchNum);
+        int pos = 0;
+        long last;
+        if (ints == null) {
+            ByteBuffer byteBuffer = byteBufferMap.get(batchNum);
+            if (byteBuffer != null) {
+                byteBuffer.clear();
+            } else {
+                TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
+                byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
+//                byteBufferMap.put(batchNum, byteBuffer);
+            }
+
+            last = byteBuffer.getLong();
+            batchFirstMap.put(batchNum, last);
+            if (last >= l && last < r) {
+                timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
+            }
+            pos++;
+            byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
+            ints = NumberUtil.rzInt(byteBuffer);
+            intsMap.put(batchNum, ints);
         } else {
-            TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
-            byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
-            byteBufferMap.put(batchNum, byteBuffer);
+            last = batchFirstMap.get(batchNum);
         }
 
-        int pos = 0;
-        long last = byteBuffer.getLong();
-        if (last >= l && last < r) {
-            timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
-        }
-        pos++;
-        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-        List<Integer> ints = NumberUtil.rzInt(byteBuffer);
         for (Integer delta : ints) {
             last = last + delta;
             if (last >= l && last < r) {

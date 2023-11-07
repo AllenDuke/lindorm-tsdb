@@ -30,7 +30,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected void append0(List<ColumnValue.IntegerColumn> integerColumns) throws IOException {
         ORIG_SIZE.getAndAdd(4L * integerColumns.size());
-        ByteBuffer buffer = this.zIntDeltaOfDelta(integerColumns);
+        ByteBuffer buffer = this.rleFirst(integerColumns);
         byte[] bytes = ByteBufferUtil.gZip(buffer);
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
@@ -85,7 +85,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.rzIntDeltaOfDelta(byteBuffer, begin, set);
+            List<Integer> ints = this.unRleFirst(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx++)), itemNum));
@@ -132,7 +132,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.rzIntDeltaOfDelta(byteBuffer, begin, set);
+            List<Integer> ints = this.unRleFirst(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 int cur = ints.get(idx++);
@@ -205,7 +205,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                     }
 
                     byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
-                    ints = this.rzIntDeltaOfDelta(byteBuffer);
+                    ints = this.unRleFirst(byteBuffer);
                     decodedMap.put(batchNum, ints);
                 }
                 long itemNumBegin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
@@ -422,7 +422,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     public ByteBuffer rleFirst(List<ColumnValue.IntegerColumn> ints) {
-        List<Integer> list = new ArrayList<>();
+        List<Integer> list = new ArrayList<>(ints.size());
         for (int i = 0; i < ints.size() - 1; i++) {
             int value = ints.get(i).getIntegerValue();
             list.add(value);
@@ -445,6 +445,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             //
             ByteBuffer byteBuffer = NumberUtil.zInt(list);
             byteBuffer.position(byteBuffer.limit());
+            byteBuffer.limit(byteBuffer.limit() + 1);
             byteBuffer.put((byte) 0);
             byteBuffer.flip();
             return byteBuffer;
@@ -453,9 +454,39 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             batchMax = Integer.MIN_VALUE;
             ByteBuffer byteBuffer = this.zIntDeltaOfDelta(ints);
             byteBuffer.position(byteBuffer.limit());
+            byteBuffer.limit(byteBuffer.limit() + 1);
             byteBuffer.put((byte) 1);
             byteBuffer.flip();
             return byteBuffer;
+        }
+    }
+
+
+    public List<Integer> unRleFirst(ByteBuffer byteBuffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
+        byte b = byteBuffer.position(byteBuffer.limit() - 1).get();
+        byteBuffer.position(0);
+        byteBuffer.limit(byteBuffer.limit() - 1);
+        if (b == 0) {
+            List<Integer> list = new ArrayList<>();
+            List<Integer> unRle = NumberUtil.rzInt(byteBuffer);
+            int pairCnt = unRle.size() >> 1;
+            int idx = 0;
+            for (int i = 0; i < pairCnt; i++) {
+                Integer v = unRle.get(2 * i);
+                Integer cnt = unRle.get(2 * i + 1);
+                for (int j = 0; j < cnt; j++) {
+                    if (idx < batchNumList.size() && batchNumList.get(idx) == batchNumBegin++) {
+                        list.add(v);
+                        idx++;
+                    }
+                    if (idx == batchNumList.size()) {
+                        return list;
+                    }
+                }
+            }
+            return list;
+        } else {
+            return this.rzIntDeltaOfDelta(byteBuffer, batchNumBegin, batchNumList);
         }
     }
 

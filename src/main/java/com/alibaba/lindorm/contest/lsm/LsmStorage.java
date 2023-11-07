@@ -116,7 +116,7 @@ public class LsmStorage {
                 latestTime = metaChannel.map(FileChannel.MapMode.READ_ONLY, 0, 8).getLong();
             }
 
-            File dataFile = new File(dir.getAbsolutePath(), "data");
+            File dataFile = new File(dir.getAbsolutePath(), "time.data");
             if (!dataFile.exists()) {
                 dataFile.createNewFile();
             }
@@ -124,6 +124,12 @@ public class LsmStorage {
             DataChannel dataChannel = new DataChannel(dataFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
             this.timeChannel = new TimeChannel(dataChannel, timeIndexItemList);
             indexItemSize += TimeIndexItem.SIZE;
+
+            dataFile = new File(dir.getAbsolutePath(), "column.data");
+            if (!dataFile.exists()) {
+                dataFile.createNewFile();
+            }
+
             for (TableSchema.Column column : tableSchema.getColumnList()) {
                 columnTypeMap.put(column.columnName, column.columnType);
                 if (column.columnType.equals(ColumnValue.ColumnType.COLUMN_TYPE_INTEGER)) {

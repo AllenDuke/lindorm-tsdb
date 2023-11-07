@@ -214,7 +214,7 @@ public class TimeChannel {
             } else {
                 TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
                 byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
-//                byteBufferMap.put(batchNum, byteBuffer);
+                byteBufferMap.put(batchNum, byteBuffer);
             }
 
             last = byteBuffer.getLong();
@@ -222,7 +222,7 @@ public class TimeChannel {
 
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
             ints = NumberUtil.rzInt(byteBuffer);
-            intsMap.put(batchNum, ints);
+//            intsMap.put(batchNum, ints);
         } else {
             last = batchFirstMap.get(batchNum);
         }

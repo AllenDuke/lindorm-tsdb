@@ -422,4 +422,33 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         }
         return false;
     }
+
+    public ByteBuffer rleFirst(List<ColumnValue.IntegerColumn> ints) {
+        List<Integer> list = new ArrayList<>();
+        for (int i = 0; i < ints.size() - 1; i++) {
+            int value = ints.get(i).getIntegerValue();
+            list.add(value);
+            int count = 1;
+            boolean bo = true;
+            while (bo) {
+                if (i < ints.size() - 1 && ints.get(i).equals(ints.get(i + 1))) {
+                    count++;
+                    i++;
+                } else {
+                    bo = false;
+                }
+            }
+            //循环结束，统计相同的个数
+            list.add(count);
+            batchSum += (long) value * count;
+            batchMax = Math.max(batchMax, value);
+        }
+        if (list.size() < ints.size()) {
+            return NumberUtil.zInt(list);
+        } else {
+            batchSum = 0;
+            batchMax = Integer.MIN_VALUE;
+            return this.zInt(ints);
+        }
+    }
 }

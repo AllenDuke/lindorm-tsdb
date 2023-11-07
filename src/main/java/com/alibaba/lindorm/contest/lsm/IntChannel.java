@@ -208,10 +208,11 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                     ints = this.rzIntDeltaOfDelta(byteBuffer);
                     decodedMap.put(batchNum, ints);
                 }
-                long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-                List<Long> set = batchTimeItemSetMap.get(batchNum);
-                for (Integer cur : ints) {
-                    if (set.contains(itemNum++) && compare(columnFilter, cur)) {
+                long itemNumBegin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+                List<Long> list = batchTimeItemSetMap.get(batchNum);
+                for (Long itemNum : list) {
+                    Integer cur = ints.get((int) (itemNum - itemNumBegin));
+                    if (compare(columnFilter, cur)) {
                         sum += cur;
                         validCount++;
                         max = Math.max(max, cur);

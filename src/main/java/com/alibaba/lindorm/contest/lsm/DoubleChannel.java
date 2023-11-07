@@ -209,13 +209,14 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
                     doubles = unElf(byteBuffer);
                     decodedMap.put(batchNum, doubles);
                 }
-                long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
-                List<Long> set = batchTimeItemSetMap.get(batchNum);
-                for (Double cur : doubles) {
-                    if (set.contains(itemNum++) && compare(columnFilter, cur)) {
+                long itemNumBegin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
+                List<Long> list = batchTimeItemSetMap.get(batchNum);
+                for (Long itemNum : list) {
+                    Double cur = doubles.get((int) (itemNum - itemNumBegin));
+                    if (compare(columnFilter, cur)) {
                         sum += cur;
                         validCount++;
-                        max = Math.max(cur, max);
+                        max = Math.max(max, cur);
                     }
                 }
             }

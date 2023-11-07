@@ -55,7 +55,7 @@ public class TestDownSample {
 
             resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
                     new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC + TestMyDb.ITEM_CNT-100,
-                    TestMyDb.UTC + TestMyDb.ITEM_CNT+3600, Aggregator.MAX, 300,
+                    TestMyDb.UTC + TestMyDb.ITEM_CNT+3600, Aggregator.AVG, 300,
                     new CompareExpression(new ColumnValue.IntegerColumn(TestMyDb.ITEM_CNT-1), CompareExpression.CompareOp.EQUAL)));
             showResult(resultSet);
 

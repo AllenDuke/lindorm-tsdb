@@ -1,6 +1,5 @@
 package com.alibaba.lindorm.contest.lsm;
 
-import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
@@ -9,12 +8,9 @@ import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
@@ -34,7 +30,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected void append0(List<ColumnValue.IntegerColumn> integerColumns) throws IOException {
         ORIG_SIZE.getAndAdd(4L * integerColumns.size());
-        ByteBuffer buffer = this.zInt(integerColumns);
+        ByteBuffer buffer = this.zIntDeltaOfDelta(integerColumns);
         byte[] bytes = ByteBufferUtil.gZip(buffer);
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
@@ -89,7 +85,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.rzInt(byteBuffer, begin, set);
+            List<Integer> ints = this.rzIntDeltaOfDelta(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx++)), itemNum));
@@ -136,7 +132,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.rzInt(byteBuffer, begin, set);
+            List<Integer> ints = this.rzIntDeltaOfDelta(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 int cur = ints.get(idx++);
@@ -204,11 +200,12 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                     try {
                         byteBuffer = futureMap.get(batchNum).get();
                     } catch (Exception e) {
+                        e.printStackTrace(System.out);
                         throw new RuntimeException("获取buffer future failed.", e);
                     }
 
                     byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
-                    ints = this.rzInt(byteBuffer);
+                    ints = this.rzIntDeltaOfDelta(byteBuffer);
                     decodedMap.put(batchNum, ints);
                 }
                 long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
@@ -259,7 +256,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         isDirty = false;
     }
 
-    public List<Integer> rzInt(ByteBuffer buffer) throws IOException {
+    public List<Integer> rzIntDeltaOfDelta(ByteBuffer buffer) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
         int lastPre = buffer.getInt();
         int last = buffer.getInt();
@@ -308,7 +305,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         return ints;
     }
 
-    public List<Integer> rzInt(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
+    public List<Integer> rzIntDeltaOfDelta(ByteBuffer buffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
         if (batchNumList.isEmpty()) {
             return ints;
@@ -356,7 +353,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         throw new IOException("Invalid vInt detected (too many bits)");
     }
 
-    public ByteBuffer zInt(List<ColumnValue.IntegerColumn> ints) {
+    public ByteBuffer zIntDeltaOfDelta(List<ColumnValue.IntegerColumn> ints) {
         ByteBuffer buffer = ByteBuffer.allocate(ints.size() * 5);
         int lastPre = ints.get(0).getIntegerValue();
         batchSum += lastPre;
@@ -444,6 +441,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             batchMax = Math.max(batchMax, value);
         }
         if (list.size() < ints.size()) {
+            //
             ByteBuffer byteBuffer = NumberUtil.zInt(list);
             byteBuffer.position(byteBuffer.limit());
             byteBuffer.put((byte) 0);
@@ -452,7 +450,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         } else {
             batchSum = 0;
             batchMax = Integer.MIN_VALUE;
-            ByteBuffer byteBuffer = this.zInt(ints);
+            ByteBuffer byteBuffer = this.zIntDeltaOfDelta(ints);
             byteBuffer.position(byteBuffer.limit());
             byteBuffer.put((byte) 1);
             byteBuffer.flip();
@@ -466,17 +464,18 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         byteBuffer.limit(byteBuffer.limit() - 1);
         if (b == 0) {
             List<Integer> list = new ArrayList<>();
-            while (byteBuffer.hasRemaining()) {
-                int v = byteBuffer.getInt();
-                int cnt = byteBuffer.getInt();
-                for (int i = 0; i < cnt; i++) {
+            List<Integer> unRle = NumberUtil.rzInt(byteBuffer);
+            int pairCnt = unRle.size();
+            for (int i = 0; i < pairCnt; i++) {
+                Integer v = unRle.get(2 * i);
+                Integer cnt = unRle.get(2 * i + 1);
+                for (int j = 0; j < cnt; j++) {
                     list.add(v);
                 }
             }
             return list;
         } else {
-            return this.rzInt(byteBuffer);
+            return this.rzIntDeltaOfDelta(byteBuffer);
         }
-
     }
 }

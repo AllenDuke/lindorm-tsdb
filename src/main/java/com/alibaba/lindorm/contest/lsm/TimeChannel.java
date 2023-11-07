@@ -1,17 +1,14 @@
 package com.alibaba.lindorm.contest.lsm;
 
-import com.alibaba.lindorm.contest.CommonUtils;
 import com.alibaba.lindorm.contest.util.ByteBufferUtil;
 import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TimeChannel {
@@ -70,7 +67,7 @@ public class TimeChannel {
             lastTime = time;
         }
         timeOutput.writeLong(times[0]);
-        ByteBuffer byteBuffer = NumberUtil.zInt(ints);
+        ByteBuffer byteBuffer = NumberUtil.zIntDeltaOfDelta(ints);
         byte[] bytes = ByteBufferUtil.zstdEncode(byteBuffer);
         timeOutput.writeBytes(bytes);
 
@@ -218,10 +215,10 @@ public class TimeChannel {
             }
 
             last = byteBuffer.getLong();
-            batchFirstMap.put(batchNum, last);
+//            batchFirstMap.put(batchNum, last);
 
             byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-            ints = NumberUtil.rzInt(byteBuffer);
+            ints = NumberUtil.rzIntDeltaOfDelta(byteBuffer);
 //            intsMap.put(batchNum, ints);
         } else {
             last = batchFirstMap.get(batchNum);

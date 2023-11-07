@@ -111,7 +111,15 @@ public abstract class ColumnChannel<C extends ColumnValue> {
      * @throws IOException
      */
     protected Future<ByteBuffer> read(long batchNum, long pos, int size) throws IOException {
-        return IO_EXECUTOR.submit(() -> columnOutput.read(pos, size));
+        return IO_EXECUTOR.submit(() -> {
+            try {
+                return columnOutput.read(pos, size);
+            } catch (Throwable throwable) {
+                throwable.printStackTrace(System.out);
+                System.out.println("io处理失败");
+                return null;
+            }
+        });
 //        return IO_EXECUTOR.submit(() -> {
 //            long k = byteBufferMapK(pos);
 //            ByteBuffer byteBuffer = BYTE_BUFFER_MAP.get(k);

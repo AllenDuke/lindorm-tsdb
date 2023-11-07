@@ -33,6 +33,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             size += 4 + stringColumn.getStringValue().limit();
         }
+        // todo 短字符串序列压缩
         ByteBuffer buffer = ByteBuffer.allocate(size);
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             buffer.putInt(stringColumn.getStringValue().limit());

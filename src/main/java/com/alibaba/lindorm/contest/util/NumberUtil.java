@@ -1,21 +1,13 @@
 package com.alibaba.lindorm.contest.util;
 
-import com.alibaba.lindorm.contest.elf.ElfOnChimpDecompressor;
-import com.alibaba.lindorm.contest.elf.IDecompressor;
-import com.alibaba.lindorm.contest.structs.ColumnValue;
-
 import java.io.IOException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.alibaba.lindorm.contest.CommonUtils.ARRAY_BASE_OFFSET;
-import static com.alibaba.lindorm.contest.CommonUtils.UNSAFE;
-
 public class NumberUtil {
 
-    public static List<Integer> rzInt(ByteBuffer buffer) throws IOException {
+    public static List<Integer> rzIntDeltaOfDelta(ByteBuffer buffer) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
         int lastPre = buffer.getInt();
         int last = buffer.getInt();
@@ -26,6 +18,15 @@ public class NumberUtil {
             ints.add(cur);
             lastPre = last;
             last = cur;
+        }
+        return ints;
+    }
+
+    public static List<Integer> rzInt(ByteBuffer buffer) throws IOException {
+        List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
+        while (buffer.hasRemaining()) {
+            int cur = zigZagDecode(readVInt(buffer));
+            ints.add(cur);
         }
         return ints;
     }
@@ -52,26 +53,20 @@ public class NumberUtil {
 
     public static ByteBuffer zInt(List<Integer> ints) {
         ByteBuffer buffer = ByteBuffer.allocate(ints.size() * 5);
-        int lastPre = ints.get(0);
-        buffer.putInt(lastPre);
-        int last = ints.get(1);
-        buffer.putInt(last);
-        for (int i = 2; i < ints.size(); i++) {
+        for (int i = 0; i < ints.size(); i++) {
             int v = ints.get(i);
-            v = zigZagEncode(ints.get(i) - last - (last - lastPre));
+            v = zigZagEncode(v);
             while ((v & ~0x7F) != 0) {
                 buffer.put((byte) ((v & 0x7F) | 0x80));
                 v >>>= 7;
             }
             buffer.put((byte) v);
-            lastPre = last;
-            last = ints.get(i);
         }
         buffer.flip();
         return buffer;
     }
 
-    public static ByteBuffer zInt(int[] ints) {
+    public static ByteBuffer zIntDeltaOfDelta(int[] ints) {
         ByteBuffer buffer = ByteBuffer.allocate(ints.length * 5);
         int lastPre = ints[0];
         buffer.putInt(lastPre);

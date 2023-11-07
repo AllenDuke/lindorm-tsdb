@@ -203,25 +203,24 @@ public class TimeChannel {
 
         List<Integer> ints = intsMap.get(batchNum);
         int pos = 0;
-        long last;
+        long last = 0;
         if (ints == null) {
             ByteBuffer byteBuffer = byteBufferMap.get(batchNum);
             if (byteBuffer != null) {
                 byteBuffer.clear();
+                last = batchFirstMap.get(batchNum);
             } else {
                 TimeIndexItem timeIndexItem = timeIndexItemList.get(batchNum);
                 byteBuffer = timeOutput.read(timeIndexItem.getPos(), timeIndexItem.getSize());
+                last = byteBuffer.getLong();
+                batchFirstMap.put(batchNum, last);
+
+                byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
                 byteBufferMap.put(batchNum, byteBuffer);
             }
 
-            last = byteBuffer.getLong();
-//            batchFirstMap.put(batchNum, last);
-
-            byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
             ints = NumberUtil.rzIntDeltaOfDelta(byteBuffer);
 //            intsMap.put(batchNum, ints);
-        } else {
-            last = batchFirstMap.get(batchNum);
         }
         if (last >= l && last < r) {
             timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));

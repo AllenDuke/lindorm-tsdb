@@ -87,6 +87,21 @@ public class NumberUtil {
         return buffer;
     }
 
+    public static ByteBuffer zInt(int[] ints) {
+        ByteBuffer buffer = ByteBuffer.allocate(ints.length * 5);
+        for (int i = 0; i < ints.length; i++) {
+            int v = ints[i];
+            v = zigZagEncode(v);
+            while ((v & ~0x7F) != 0) {
+                buffer.put((byte) ((v & 0x7F) | 0x80));
+                v >>>= 7;
+            }
+            buffer.put((byte) v);
+        }
+        buffer.flip();
+        return buffer;
+    }
+
     public static int zigZagEncode(int i) {
         return (i >> 31) ^ (i << 1);
     }

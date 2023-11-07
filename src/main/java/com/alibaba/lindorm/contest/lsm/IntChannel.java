@@ -32,8 +32,17 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         ORIG_SIZE.getAndAdd(4L * integerColumns.size());
         ByteBuffer buffer = this.rleFirst(integerColumns);
         byte[] bytes = ByteBufferUtil.gZip(buffer);
-        batchSize = bytes.length;
-        columnOutput.writeBytes(bytes);
+        if (buffer.limit() < bytes.length) {
+            columnOutput.writeByte((byte) 0);
+            batchSize = 1 + buffer.limit();
+            buffer.flip();
+            byte[] bytes1 = ByteBufferUtil.toBytes(buffer);
+            columnOutput.writeBytes(bytes1);
+        } else {
+            columnOutput.writeByte((byte) 1);
+            batchSize = 1 + bytes.length;
+            columnOutput.writeBytes(bytes);
+        }
     }
 
     @Override
@@ -81,7 +90,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             } catch (Exception e) {
                 throw new RuntimeException("获取buffer future failed.", e);
             }
-            byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+            byte b = byteBuffer.get();
+            if (b == 1) {
+                byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+            }
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
@@ -127,8 +139,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             } catch (Exception e) {
                 throw new RuntimeException("获取buffer future failed.", e);
             }
-
-            byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+            byte b = byteBuffer.get();
+            if (b == 1) {
+                byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+            }
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
@@ -203,8 +217,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                         e.printStackTrace(System.out);
                         throw new RuntimeException("获取buffer future failed.", e);
                     }
-
-                    byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+                    byte b = byteBuffer.get();
+                    if (b == 1) {
+                        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
+                    }
                     ints = this.unRleFirst(byteBuffer);
                     decodedMap.put(batchNum, ints);
                 }
@@ -463,8 +479,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
 
     public List<Integer> unRleFirst(ByteBuffer byteBuffer, long batchNumBegin, List<Long> batchNumList) throws IOException {
+        int pos = byteBuffer.position();
         byte b = byteBuffer.position(byteBuffer.limit() - 1).get();
-        byteBuffer.position(0);
+        byteBuffer.position(pos);
         byteBuffer.limit(byteBuffer.limit() - 1);
         if (b == 0) {
             List<Integer> list = new ArrayList<>();

@@ -19,20 +19,19 @@
  * limitations under the License.
  */
 
-import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.TSDBEngine;
+import com.alibaba.lindorm.contest.TSDBEngineImpl;
 import com.alibaba.lindorm.contest.lsm.LsmStorage;
 import com.alibaba.lindorm.contest.structs.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-public class TestMyDbReadOnly {
+public class TestDownSample {
     public static void main(String[] args) {
         File dataDir = new File("data_dir");
 
@@ -54,30 +53,10 @@ public class TestMyDbReadOnly {
 
             long begin = System.currentTimeMillis();
 
-            requestedColumns = new HashSet<>(Arrays.asList("col1", "col2", "col3"));
-            for (int i = 0; i < TestMyDb.ITEM_CNT / LsmStorage.MAX_ITEM_CNT_L0; i++) {
-                resultSet = tsdbEngineSample.executeTimeRangeQuery(new TimeRangeQueryRequest("test",
-                        new Vin(str.getBytes(StandardCharsets.UTF_8)), requestedColumns, TestMyDb.UTC + LsmStorage.MAX_ITEM_CNT_L0 * i,
-                        TestMyDb.UTC + LsmStorage.MAX_ITEM_CNT_L0 * (i + 1)));
-                for (int j = 0; j < resultSet.size(); j++) {
-                    if (LsmStorage.MAX_ITEM_CNT_L0 * i + j != resultSet.get(j).getColumns().get("col1").getIntegerValue()) {
-                        System.out.println("err");
-                    }
-                }
-            }
-//            showResult(resultSet);
-
-            resultSet = tsdbEngineSample.executeAggregateQuery(new TimeRangeDownsampleRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC,
-                    TestMyDb.UTC + TestMyDb.ITEM_CNT, Aggregator.AVG, TestMyDb.ITEM_CNT / 10,
-                    new CompareExpression(new ColumnValue.DoubleFloatColumn(1.23), CompareExpression.CompareOp.EQUAL)));
-            System.out.println(Math.abs((int) ((TestMyDb.ITEM_CNT - 1) / 2) - resultSet.get(0).getColumns().get("col1").getDoubleFloatValue()));
-            showResult(resultSet);
-
             resultSet = tsdbEngineSample.executeDownsampleQuery(new TimeRangeDownsampleRequest("test",
-                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col2", TestMyDb.UTC,
-                    TestMyDb.UTC + 3600, Aggregator.MAX, 300,
-                    new CompareExpression(new ColumnValue.DoubleFloatColumn(3.123456), CompareExpression.CompareOp.EQUAL)));
+                    new Vin(str.getBytes(StandardCharsets.UTF_8)), "col1", TestMyDb.UTC + 123,
+                    TestMyDb.UTC + 3600 + 123, Aggregator.MAX, 300,
+                    new CompareExpression(new ColumnValue.IntegerColumn(123), CompareExpression.CompareOp.EQUAL)));
             showResult(resultSet);
 
             System.out.println((System.currentTimeMillis() - begin));

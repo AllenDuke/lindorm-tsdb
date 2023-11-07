@@ -33,13 +33,14 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             size += 4 + stringColumn.getStringValue().limit();
         }
-        // todo 短字符串序列压缩
         ByteBuffer buffer = ByteBuffer.allocate(size);
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
             buffer.putInt(stringColumn.getStringValue().limit());
             buffer.put(stringColumn.getStringValue());
         }
-        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
+        // 短字符串序列用更高的压缩等级
+        int level = ((size - 4 * stringColumns.size()) / stringColumns.size()) < 10 ? 10 : 1;
+        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array(), level);
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
         ORIG_SIZE.getAndAdd(size);

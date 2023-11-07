@@ -71,8 +71,8 @@ public class ByteBufferUtil {
         return Zstd.compress(toBytes(buffer));
     }
 
-    public static byte[] zstdEncode(byte[] array1) throws IOException {
-        return Zstd.compress(array1);
+    public static byte[] zstdEncode(byte[] array1, int level) throws IOException {
+        return Zstd.compress(array1, level);
     }
 
     //    7643 610360

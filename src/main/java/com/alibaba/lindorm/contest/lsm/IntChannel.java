@@ -444,11 +444,39 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             batchMax = Math.max(batchMax, value);
         }
         if (list.size() < ints.size()) {
-            return NumberUtil.zInt(list);
+            ByteBuffer byteBuffer = NumberUtil.zInt(list);
+            byteBuffer.position(byteBuffer.limit());
+            byteBuffer.put((byte) 0);
+            byteBuffer.flip();
+            return byteBuffer;
         } else {
             batchSum = 0;
             batchMax = Integer.MIN_VALUE;
-            return this.zInt(ints);
+            ByteBuffer byteBuffer = this.zInt(ints);
+            byteBuffer.position(byteBuffer.limit());
+            byteBuffer.put((byte) 1);
+            byteBuffer.flip();
+            return byteBuffer;
         }
+    }
+
+    public List<Integer> unRleFirst(ByteBuffer byteBuffer) throws IOException {
+        byte b = byteBuffer.position(byteBuffer.limit() - 1).get();
+        byteBuffer.position(0);
+        byteBuffer.limit(byteBuffer.limit() - 1);
+        if (b == 0) {
+            List<Integer> list = new ArrayList<>();
+            while (byteBuffer.hasRemaining()) {
+                int v = byteBuffer.getInt();
+                int cnt = byteBuffer.getInt();
+                for (int i = 0; i < cnt; i++) {
+                    list.add(v);
+                }
+            }
+            return list;
+        } else {
+            return this.rzInt(byteBuffer);
+        }
+
     }
 }

@@ -136,7 +136,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
                 nextIdx++;
             }
             itemNum++;
-        } while (byteBuffer.hasRemaining() && nextIdx < batchItemSet.size());
+        } while (nextIdx < batchItemSet.size());
         return columnItemList;
     }
 

@@ -30,7 +30,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     @Override
     protected void append0(List<ColumnValue.IntegerColumn> integerColumns) throws IOException {
         ORIG_SIZE.getAndAdd(4L * integerColumns.size());
-        ByteBuffer buffer = this.rleFirst(integerColumns);
+        ByteBuffer buffer = this.zIntDelta(integerColumns);
         byte[] bytes = ByteBufferUtil.gZip(buffer);
         if (buffer.limit() < bytes.length) {
             columnOutput.writeByte((byte) 0);
@@ -97,7 +97,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.unRleFirst(byteBuffer, begin, set);
+            List<Integer> ints = this.rzIntDelta(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx++)), itemNum));
@@ -146,7 +146,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
-            List<Integer> ints = this.unRleFirst(byteBuffer, begin, set);
+            List<Integer> ints = this.rzIntDelta(byteBuffer, begin, set);
             int idx = 0;
             for (Long itemNum : set) {
                 int cur = ints.get(idx++);
@@ -222,7 +222,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
                     if (b == 1) {
                         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.unGZip(byteBuffer));
                     }
-                    ints = this.unRleFirst(byteBuffer);
+                    ints = this.rzIntDelta(byteBuffer);
                     decodedMap.put(batchNum, ints);
                 }
                 long itemNumBegin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
@@ -509,8 +509,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
     }
 
     public List<Integer> unRleFirst(ByteBuffer byteBuffer) throws IOException {
+        int pos = byteBuffer.position();
         byte b = byteBuffer.position(byteBuffer.limit() - 1).get();
-        byteBuffer.position(0);
+        byteBuffer.position(pos);
         byteBuffer.limit(byteBuffer.limit() - 1);
         if (b == 0) {
             List<Integer> list = new ArrayList<>();

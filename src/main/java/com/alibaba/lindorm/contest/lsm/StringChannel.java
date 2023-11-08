@@ -38,9 +38,10 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             buffer.putInt(stringColumn.getStringValue().limit());
             buffer.put(stringColumn.getStringValue());
         }
+        buffer.flip();
         // todo 长字符串序列用更高的压缩等级 todo hash位图编码
         int level = ((size - 4 * stringColumns.size()) / stringColumns.size()) >= 10 ? 1 : 1;
-        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
+        byte[] bytes = ByteBufferUtil.zstdEncode(buffer);
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
         ORIG_SIZE.getAndAdd(size);

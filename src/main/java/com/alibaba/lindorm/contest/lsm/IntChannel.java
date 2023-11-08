@@ -195,6 +195,7 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
         }
         for (Long batchNum : needLoadBatchNumSet) {
             ColumnIndexItem columnIndexItem = columnIndexItemMap.get(batchNum);
+            // todo bitmap过滤
             futureMap.put(batchNum, read(batchNum, columnIndexItem.getPos(), columnIndexItem.getSize()));
         }
 

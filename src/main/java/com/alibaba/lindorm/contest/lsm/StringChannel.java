@@ -40,7 +40,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         }
         // todo 长字符串序列用更高的压缩等级 todo hash位图编码
         int level = ((size - 4 * stringColumns.size()) / stringColumns.size()) >= 10 ? 1 : 1;
-        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array(), level);
+        byte[] bytes = ByteBufferUtil.zstdEncode(buffer.array());
         batchSize = bytes.length;
         columnOutput.writeBytes(bytes);
         ORIG_SIZE.getAndAdd(size);

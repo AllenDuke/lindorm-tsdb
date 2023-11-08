@@ -22,6 +22,18 @@ public class NumberUtil {
         return ints;
     }
 
+    public static List<Integer> rzIntDelta(ByteBuffer buffer) throws IOException {
+        List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
+        int last = buffer.getInt();
+        ints.add(last);
+        while (buffer.hasRemaining()) {
+            int cur = last + zigZagDecode(readVInt(buffer));
+            ints.add(cur);
+            last = cur;
+        }
+        return ints;
+    }
+
     public static List<Integer> rzInt(ByteBuffer buffer) throws IOException {
         List<Integer> ints = new ArrayList<>(buffer.limit() >> 2);
         while (buffer.hasRemaining()) {
@@ -81,6 +93,24 @@ public class NumberUtil {
             }
             buffer.put((byte) v);
             lastPre = last;
+            last = ints[i];
+        }
+        buffer.flip();
+        return buffer;
+    }
+
+    public static ByteBuffer zIntDelta(int[] ints) {
+        ByteBuffer buffer = ByteBuffer.allocate(ints.length * 5);
+        int last = ints[0];
+        buffer.putInt(last);
+        for (int i = 1; i < ints.length; i++) {
+            int v = ints[i];
+            v = zigZagEncode(ints[i] - last);
+            while ((v & ~0x7F) != 0) {
+                buffer.put((byte) ((v & 0x7F) | 0x80));
+                v >>>= 7;
+            }
+            buffer.put((byte) v);
             last = ints[i];
         }
         buffer.flip();

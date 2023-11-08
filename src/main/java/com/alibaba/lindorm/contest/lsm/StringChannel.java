@@ -5,6 +5,7 @@ import com.alibaba.lindorm.contest.structs.Aggregator;
 import com.alibaba.lindorm.contest.structs.ColumnValue;
 import com.alibaba.lindorm.contest.structs.CompareExpression;
 import com.alibaba.lindorm.contest.util.ByteBufferUtil;
+import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -30,12 +31,17 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     @Override
     protected void append0(List<ColumnValue.StringColumn> stringColumns) throws IOException {
         int size = 0;
+        int[] sizeList = new int[stringColumns.size()];
+        int i = 0;
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            size += 4 + stringColumn.getStringValue().limit();
+            sizeList[i++] = stringColumn.getStringValue().limit();
+            size += stringColumn.getStringValue().limit();
         }
-        ByteBuffer buffer = ByteBuffer.allocate(size);
+        ByteBuffer byteBuffer = NumberUtil.zIntDelta(sizeList);
+        ByteBuffer buffer = ByteBuffer.allocate(4 + byteBuffer.limit() + size);
+        buffer.putInt(byteBuffer.limit());
+        buffer.put(byteBuffer);
         for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            buffer.putInt(stringColumn.getStringValue().limit());
             buffer.put(stringColumn.getStringValue());
         }
         buffer.flip();
@@ -115,10 +121,15 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             throw new RuntimeException("获取buffer future failed.", e);
         }
         byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
+        int listSize = byteBuffer.getInt();
+        ByteBuffer slice = byteBuffer.slice();
+        slice.limit(listSize);
+        List<Integer> sizeList = NumberUtil.rzIntDelta(slice);
         long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
         int nextIdx = 0;
+        int i = 0;
         do {
-            ColumnValue.StringColumn column = readFrom(byteBuffer);
+            ColumnValue.StringColumn column = readFrom(byteBuffer, sizeList.get(i++));
             if (batchItemSet.get(nextIdx).equals(itemNum)) {
                 columnItemList.add(new ColumnItem<>(column, itemNum));
                 nextIdx++;
@@ -128,8 +139,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         return columnItemList;
     }
 
-    private ColumnValue.StringColumn readFrom(ByteBuffer buffer) {
-        int strLen = buffer.getInt();
+    private ColumnValue.StringColumn readFrom(ByteBuffer buffer, int strLen) {
         boolean zip = false;
         if (strLen < 0) {
             zip = true;

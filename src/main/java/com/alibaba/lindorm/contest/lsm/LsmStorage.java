@@ -387,7 +387,14 @@ public class LsmStorage {
         for (int i = 0; i < timeRange.size(); i++) {
             Map<String, ColumnValue> columnValueMap = new HashMap<>(columnValueListMap.size());
             int finalI = i;
-            columnValueListMap.forEach((k, v) -> columnValueMap.put(k, v.get(finalI)));
+            columnValueListMap.forEach((k, v) -> {
+                try {
+                    columnValueMap.put(k, v.get(finalI));
+                } catch (Throwable throwable) {
+                    throwable.printStackTrace(System.out);
+                    System.out.println(columnTypeMap.get(k) + " 列名：" + k + " 读取失败");
+                }
+            });
             rowList.add(new Row(vin, timeRange.get(i).getTime(), columnValueMap));
         }
 

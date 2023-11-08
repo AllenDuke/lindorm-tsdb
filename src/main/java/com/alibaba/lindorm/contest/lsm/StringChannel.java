@@ -125,6 +125,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
         ByteBuffer slice = byteBuffer.slice();
         slice.limit(listSize);
         List<Integer> sizeList = NumberUtil.rzIntDelta(slice);
+        byteBuffer.position(4 + slice.limit());
         long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
         int nextIdx = 0;
         int i = 0;

@@ -23,7 +23,7 @@ public class TestZstd {
         allocate.flip();
         byte[] bytes = ByteBufferUtil.toBytes(allocate);
         byte[] compress = Zstd.compress(bytes);
-        byte[] compress1 = Zstd.compress(bytes, 10);
+        byte[] compress1 = Zstd.compress(bytes, 19);
         System.out.println(bytes.length + " " + compress.length + " " + compress1.length);
     }
 }

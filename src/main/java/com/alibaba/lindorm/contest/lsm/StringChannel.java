@@ -60,7 +60,7 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             }
             buffer.flip();
             // todo 长字符串序列用更高的压缩等级 todo hash位图编码
-            int level = (size / stringColumns.size()) < 10 ? 10 : 3;
+            int level = (size / stringColumns.size()) < 10 ? 19 : 3;
             byte[] bytes = ByteBufferUtil.zstdEncode(buffer, level);
             batchSize += bytes.length;
             columnOutput.writeBytes(bytes);
@@ -174,22 +174,9 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
     }
 
     private ColumnValue.StringColumn readFrom(ByteBuffer buffer, int strLen) {
-        boolean zip = false;
-        if (strLen < 0) {
-            zip = true;
-            strLen = -strLen;
-        }
-
-        byte[] strBytes = new byte[strLen];
-        buffer.get(strBytes);
-        ByteBuffer wrap;
-        if (zip) {
-            wrap = ByteBuffer.wrap(CommonUtils.unGZip(strBytes));
-        } else {
-            wrap = ByteBuffer.wrap(strBytes);
-        }
-
-        return new ColumnValue.StringColumn(wrap);
+        ByteBuffer slice = buffer.slice();
+        slice.limit(strLen);
+        return new ColumnValue.StringColumn(slice);
     }
 
     @Override

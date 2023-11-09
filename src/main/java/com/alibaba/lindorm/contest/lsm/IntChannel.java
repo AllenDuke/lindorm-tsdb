@@ -98,9 +98,10 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Integer> ints = this.rzIntDelta(byteBuffer, begin, set);
-            int idx = 0;
-            for (Long itemNum : set) {
-                columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(idx++)), itemNum));
+            int size = set.size();
+            for (int i = 0; i < size; i++) {
+                // 减少不必要的内存访问
+                columnItemList.add(new ColumnItem<>(new ColumnValue.IntegerColumn(ints.get(i)), -1));
             }
         }
 
@@ -147,9 +148,9 @@ public class IntChannel extends ColumnChannel<ColumnValue.IntegerColumn> {
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Integer> ints = this.rzIntDelta(byteBuffer, begin, set);
-            int idx = 0;
-            for (Long itemNum : set) {
-                int cur = ints.get(idx++);
+            int size = set.size();
+            for (int i = 0; i < size; i++) {
+                int cur = ints.get(i);
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;

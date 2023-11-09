@@ -99,9 +99,10 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Double> doubles = unElf(byteBuffer, begin, set);
-            int idx = 0;
-            for (Long itemNum : set) {
-                columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(doubles.get(idx++)), itemNum));
+            int size = set.size();
+            for (int i = 0; i < size; i++) {
+                // 减少不必要的内存访问
+                columnItemList.add(new ColumnItem<>(new ColumnValue.DoubleFloatColumn(doubles.get(i)), -1));
             }
         }
         return columnItemList;
@@ -140,9 +141,9 @@ public class DoubleChannel extends ColumnChannel<ColumnValue.DoubleFloatColumn> 
             long begin = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
             List<Long> set = batchTimeItemSetMap.get(batchNum);
             List<Double> doubles = unElf(byteBuffer, begin, set);
-            int idx = 0;
-            for (Long itemNum : set) {
-                double cur = doubles.get(idx++);
+            int size = set.size();
+            for (int i = 0; i < size; i++) {
+                double cur = doubles.get(i);
                 if (columnFilter == null || compare(columnFilter, cur)) {
                     sum += cur;
                     validCount++;

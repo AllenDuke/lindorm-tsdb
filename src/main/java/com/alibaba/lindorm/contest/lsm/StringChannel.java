@@ -39,31 +39,37 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             sizeList[i++] = stringColumn.getStringValue().limit();
             size += stringColumn.getStringValue().limit();
         }
-        ByteBuffer sizeListBuffer = NumberUtil.zIntDelta(sizeList);
-        byte[] sizeListBytes = ByteBufferUtil.gZip(sizeListBuffer);
-        if (sizeListBuffer.limit() < sizeListBytes.length) {
-            columnOutput.writeByte((byte) 0);
-            columnOutput.writeInt(sizeListBuffer.limit());
-            batchSize += 1 + 4 + sizeListBuffer.limit();
-            sizeListBuffer.flip();
-            columnOutput.writeBytes(ByteBufferUtil.toBytes(sizeListBuffer));
+        if (size > 0) {
+            ByteBuffer sizeListBuffer = NumberUtil.zIntDelta(sizeList);
+            byte[] sizeListBytes = ByteBufferUtil.gZip(sizeListBuffer);
+            if (sizeListBuffer.limit() < sizeListBytes.length) {
+                columnOutput.writeByte((byte) 0);
+                columnOutput.writeInt(sizeListBuffer.limit());
+                batchSize += 1 + 4 + sizeListBuffer.limit();
+                sizeListBuffer.flip();
+                columnOutput.writeBytes(ByteBufferUtil.toBytes(sizeListBuffer));
+            } else {
+                columnOutput.writeByte((byte) 1);
+                columnOutput.writeInt(sizeListBytes.length);
+                batchSize += 1 + 4 + sizeListBytes.length;
+                columnOutput.writeBytes(sizeListBytes);
+            }
+            ByteBuffer buffer = ByteBuffer.allocate(size);
+            for (ColumnValue.StringColumn stringColumn : stringColumns) {
+                buffer.put(stringColumn.getStringValue());
+            }
+            buffer.flip();
+            // todo 长字符串序列用更高的压缩等级 todo hash位图编码
+            int level = (size / stringColumns.size()) < 10 ? 10 : 3;
+            byte[] bytes = ByteBufferUtil.zstdEncode(buffer, level);
+            batchSize += bytes.length;
+            columnOutput.writeBytes(bytes);
         } else {
-            columnOutput.writeByte((byte) 1);
-            columnOutput.writeInt(sizeListBytes.length);
-            batchSize += 1 + 4 + sizeListBytes.length;
-            columnOutput.writeBytes(sizeListBytes);
+            // 空列
+            columnOutput.writeByte((byte) 2);
+            batchSize += 1;
         }
 
-        ByteBuffer buffer = ByteBuffer.allocate(size);
-        for (ColumnValue.StringColumn stringColumn : stringColumns) {
-            buffer.put(stringColumn.getStringValue());
-        }
-        buffer.flip();
-        // todo 长字符串序列用更高的压缩等级 todo hash位图编码
-        int level = ((size - stringColumns.size()) / stringColumns.size()) < 10 ? 10 : 3;
-        byte[] bytes = ByteBufferUtil.zstdEncode(buffer);
-        batchSize += bytes.length;
-        columnOutput.writeBytes(bytes);
         ORIG_SIZE.getAndAdd(size);
     }
 
@@ -135,15 +141,24 @@ public class StringChannel extends ColumnChannel<ColumnValue.StringColumn> {
             throw new RuntimeException("获取buffer future failed.", e);
         }
         byte b = byteBuffer.get();
-        int listSize = byteBuffer.getInt();
-        ByteBuffer slice = byteBuffer.slice();
-        slice.limit(listSize);
-        if (b == 1) {
-            slice = ByteBuffer.wrap(ByteBufferUtil.unGZip(slice));
+        List<Integer> sizeList;
+        if (b == 2) {
+            // 该批次为空序列，序列条目数量<=LsmStorage.MAX_ITEM_CNT_L0，
+            sizeList = new ArrayList<>(LsmStorage.MAX_ITEM_CNT_L0);
+            for (int i = 0; i < LsmStorage.MAX_ITEM_CNT_L0; i++) {
+                sizeList.add(0);
+            }
+        } else {
+            int listSize = byteBuffer.getInt();
+            ByteBuffer slice = byteBuffer.slice();
+            slice.limit(listSize);
+            if (b == 1) {
+                slice = ByteBuffer.wrap(ByteBufferUtil.unGZip(slice));
+            }
+            sizeList = NumberUtil.rzIntDelta(slice);
+            byteBuffer.position(1 + 4 + listSize);
+            byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         }
-        List<Integer> sizeList = NumberUtil.rzIntDelta(slice);
-        byteBuffer.position(1 + 4 + listSize);
-        byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
         long itemNum = batchNum * LsmStorage.MAX_ITEM_CNT_L0;
         int nextIdx = 0;
         int i = 0;

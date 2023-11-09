@@ -65,7 +65,7 @@ public class TestMyDb {
             tsdbEngineSample.connect();
 
             Map<String, ColumnValue> columns = new HashMap<>();
-            int bufferSize = 100;
+            int bufferSize = 0;
             ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
             for (int i = 0; i < bufferSize; i++) {
                 buffer.put((byte) 'h');

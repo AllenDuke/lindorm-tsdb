@@ -122,7 +122,7 @@ public class LsmStorage {
             }
 
             DataChannel dataChannel = new DataChannel(dataFile, LsmStorage.IO_MODE, 16, LsmStorage.OUTPUT_BUFFER_SIZE);
-            this.timeChannel = new TimeChannel(dataChannel, timeIndexItemList);
+            this.timeChannel = new TimeChannel(vinStr.hashCode(), dataChannel, timeIndexItemList);
             indexItemSize += TimeIndexItem.SIZE;
 
             dataFile = new File(dir.getAbsolutePath(), "column.data");

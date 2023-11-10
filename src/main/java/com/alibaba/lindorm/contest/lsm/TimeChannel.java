@@ -5,16 +5,20 @@ import com.alibaba.lindorm.contest.util.NumberUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TimeChannel {
 
     public static final AtomicLong ORIG_SIZE = new AtomicLong(0);
     public static final AtomicLong REAL_SIZE = new AtomicLong(0);
+
+    /**
+     * 所有vin共享一个大缓存池。
+     * BYTE_BUFFER_MAP，k高32位为vin.hashcode
+     */
+    private static final AtomicLong AVAILABLE = new AtomicLong(1L * 1024 * 1024 * 1024);
+    private static final Map<Long, List<Integer>> INTS_MAP = Collections.synchronizedMap(new LinkedHashMap<>());
 
     private final DataChannel timeOutput;
 
@@ -38,11 +42,14 @@ public class TimeChannel {
     private long batchPos;
     private int batchSize;
 
+    private final int vinHashCode;
+
     private Map<Integer, ByteBuffer> byteBufferMap = new HashMap<>();
-    private Map<Integer, List<Integer>> intsMap = new HashMap<>();
+
     private Map<Integer, Long> batchFirstMap = new HashMap<>();
 
-    public TimeChannel(DataChannel dataChannel, List<TimeIndexItem> timeIndexItemList) throws IOException {
+    public TimeChannel(int vinHashCode, DataChannel dataChannel, List<TimeIndexItem> timeIndexItemList) throws IOException {
+        this.vinHashCode = vinHashCode;
         timeOutput = dataChannel;
         this.timeIndexItemList = timeIndexItemList;
     }
@@ -201,9 +208,11 @@ public class TimeChannel {
 //        int read = timeInput.read(byteBuffer.array());
 //        byteBuffer.limit(read);
 
-        List<Integer> ints = intsMap.get(batchNum);
+        long k = intsMapK(batchNum);
+        List<Integer> ints = INTS_MAP.get(k);
+
         int pos = 0;
-        long last = 0;
+        Long last = batchFirstMap.get(batchNum);
         if (ints == null) {
             ByteBuffer byteBuffer = byteBufferMap.get(batchNum);
             if (byteBuffer != null) {
@@ -216,11 +225,11 @@ public class TimeChannel {
                 batchFirstMap.put(batchNum, last);
 
                 byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-                byteBufferMap.put(batchNum, byteBuffer);
+//                byteBufferMap.put(batchNum, byteBuffer);
             }
 
             ints = NumberUtil.rzIntDeltaOfDelta(byteBuffer);
-//            intsMap.put(batchNum, ints);
+            cache(k, ints);
         }
         if (last >= l && last < r) {
             timeItemList.add(new TimeItem(last, (long) batchNum * LsmStorage.MAX_ITEM_CNT_L0 + pos));
@@ -240,4 +249,30 @@ public class TimeChannel {
     public long getIndexFileSize() {
         return indexFileSize;
     }
+
+    private long intsMapK(int batchNum) {
+        // todo 换成vinId
+        long k = vinHashCode;
+        k = k << 32;
+        k = k | batchNum;
+        return k;
+    }
+
+    private void cache(long k, List<Integer> ints) {
+        AVAILABLE.addAndGet(-((long) ints.size() << 2));
+        synchronized (INTS_MAP) {
+            INTS_MAP.put(k, ints);
+            // 避免并发修改
+            Iterator<Map.Entry<Long, List<Integer>>> entryIterator = INTS_MAP.entrySet().iterator();
+            while (entryIterator.hasNext()) {
+                if (AVAILABLE.get() > 0) {
+                    break;
+                }
+                List<Integer> remove = entryIterator.next().getValue();
+                AVAILABLE.addAndGet((long) remove.size() << 2);
+                entryIterator.remove();
+            }
+        }
+    }
+
 }

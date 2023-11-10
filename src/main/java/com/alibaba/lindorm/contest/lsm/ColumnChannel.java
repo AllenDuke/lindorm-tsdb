@@ -34,11 +34,6 @@ public abstract class ColumnChannel<C extends ColumnValue> {
 
     protected final DataChannel columnOutput;
 
-    /**
-     * todo lru
-     */
-//    private final RandomAccessFile columnInput;
-
     protected int batchSize;
 
     protected long batchPos;

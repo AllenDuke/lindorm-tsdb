@@ -73,7 +73,7 @@ public class DataChannel {
 //            inputNio = new FileInputStream(dataFile).getChannel();
 //            inputBioStream = new FileInputStream(dataFile); 
 
-            // 5000个vin 60+1列，这里需要2.5GB todo 池化 资源管理 flush的时候归还
+            // 5000个vin 60+1列，这里需要2.5GB
             lastBuffer = ByteBuffer.allocateDirect(nioBuffersSize * 1024);
         } else if (this.ioMode == 1) {
             outputBio = new BufferedOutputStream(new FileOutputStream(dataFile, true), bioBufferSize);

@@ -17,7 +17,7 @@ public class TimeChannel {
      * 所有vin共享一个大缓存池。
      * BYTE_BUFFER_MAP，k高32位为vin.hashcode
      */
-    private static final AtomicLong AVAILABLE = new AtomicLong(1L * 1024 * 1024 * 1024);
+    private static final AtomicLong AVAILABLE = new AtomicLong(256 * 1024 * 1024);
     private static final Map<Long, List<Integer>> INTS_MAP = Collections.synchronizedMap(new LinkedHashMap<>());
 
     private final DataChannel timeOutput;
@@ -225,7 +225,7 @@ public class TimeChannel {
                 batchFirstMap.put(batchNum, last);
 
                 byteBuffer = ByteBuffer.wrap(ByteBufferUtil.zstdDecode(byteBuffer));
-//                byteBufferMap.put(batchNum, byteBuffer);
+                byteBufferMap.put(batchNum, byteBuffer);
             }
 
             ints = NumberUtil.rzIntDeltaOfDelta(byteBuffer);

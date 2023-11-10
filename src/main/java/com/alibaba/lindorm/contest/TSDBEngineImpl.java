@@ -80,7 +80,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             if (!schemaFile.exists() || !schemaFile.isFile()) {
                 System.out.println("Connect new database with empty pre-written data");
                 connected = true;
-                initFlusher();
+//                initFlusher();
                 return;
             }
             try (BufferedReader reader = new BufferedReader(new FileReader(schemaFile))) {
@@ -103,7 +103,7 @@ public class TSDBEngineImpl extends TSDBEngine {
             }
             tableSchema = new TableSchema(columnsName, columnsType);
             connected = true;
-            initFlusher();
+//            initFlusher();
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             System.out.println("connect failed.");
